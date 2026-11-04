@@ -4,7 +4,7 @@
 
 - 本地路径：`E:\01科研之路\a.有价值的文章`
 - 远端仓库：https://github.com/xumuxi142857/artical-auto-scratch （GitHub，main 分支，公开）
-- 用途：把每天收集的会议论文（正式版 PDF、arXiv 版、正文中文译文 md/docx、README、当日索引）同步到 GitHub 备份／分享。
+- 用途：把每天收集的会议论文（原文 PDF 一份、正文中文译文 Word、README、当日索引）同步到 GitHub 备份／分享。
 
 ## 2. 硬性约定：每次更新文件夹都要同步
 
@@ -38,5 +38,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "_工具与原文提取\sync
 
 ## 5. 其它
 
-- 论文目录结构：`<YYYY-MM-DD>\NN_会议年份_短标题\`，每篇固定含 `原文_*正式版.pdf`、`原文_arXiv*.pdf`（如有）、`翻译_正文中文.md`、`翻译_正文中文.docx`、`README.md`；当天另有 `00_今日索引_<日期>.md`。
+- 论文目录结构：`<YYYY-MM-DD>\NN_会议年份_短标题\`，**每篇只放 3 个文件**：
+  1. `原文_*.pdf` —— **只存一个 PDF**：能拿到会议正式版就存正式版（`原文_<会议年份>正式版.pdf`，引用以它为准），拿不到就存 arXiv 版（`原文_arXiv<id>.pdf`）。不要再同时存两个版本。
+  2. `翻译_正文中文.docx` —— **译文只交 Word**。生成时可以临时用 Markdown 走 `md2docx.py`，但**交付前必须删掉 .md 与 part*.md**，文件夹里不留 Markdown。
+  3. `README.md` —— 会议/CCF/出版信息/链接/贡献/关键数字/阅读建议/BibTeX。
+  当天另有 `00_今日索引_<日期>.md`（这个 .md 要保留，它是索引不是译文）。
 - 工具脚本在 `_工具与原文提取\`：`extract.py`（PDF→txt）、`merge_parts.py`、`md2docx.py`（md→docx）、`sync_to_github.ps1`（同步）。

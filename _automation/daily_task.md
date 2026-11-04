@@ -38,23 +38,23 @@
 
 新建文件夹：`<今天日期>\NN_会议年份_短标题\`（NN = 01/02/03），例如 `2026-11-05\01_ICML2026_XXX`。
 
-文件夹内固定四类文件：
+文件夹内**只放三个文件**：
 
-1. **原文 PDF（正式版优先）**
-   - 命名：`原文_<会议年份>正式版.pdf`；拿不到正式版时用 `原文_arXiv<编号>.pdf` 并在 README 注明。
-   - arXiv 版也尽量一起存：`原文_arXiv<编号>.pdf`。
+1. **原文 PDF（只存一个版本）**
+   - 优先会议正式版：`原文_<会议年份>正式版.pdf`；拿不到正式版就存 arXiv 版 `原文_arXiv<编号>.pdf`。
+   - **不要同时存两个版本**，存一个即可（正式版优先，因为可引用）。
    - 常见来源：
      - PMLR：官方页 `proceedings.mlr.press/vNNN/<id>.html`，PDF 实际在 `https://raw.githubusercontent.com/mlresearch/vNNN/main/assets/<id>/<id>.pdf`（proceedings 直链多为 404）。
      - ACL Anthology：`https://aclanthology.org/< anthology_id >.pdf`（很慢，务必分块）。
      - OpenReview：`https://openreview.net/pdf?id=<id>`。
-2. **`翻译_正文中文.md`**：正文全文简体中文翻译。
+     - arXiv：`https://arxiv.org/pdf/<id>`。
+2. **`翻译_正文中文.docx`（译文只交 Word，不交 Markdown）**
    - 范围：标题、摘要、引言到结论（含 Limitations/Impact Statement 这类正文小节）；**不译** References 与附录。
    - 保留章节编号、公式编号、表格编号；表格用 Markdown 表格还原，数字必须与原文一致。
    - 术语第一次出现给中英对照（如 心智理论（Theory of Mind, ToM））。
-   - 长文分 part1..part4 写，再用 `merge_parts.py` 合并，删除 part 文件。
+   - 做法：先写 part1..part4.md（或整篇一个 md），用 `md2docx.py` 转成 docx，**交付前删掉所有 .md 与 part 文件**，文件夹里不留 Markdown。
    - 原文有笔误/数字对不上时：照原文翻译并在文末“译注”里注明，不要擅自改数。
-3. **`翻译_正文中文.docx`**：用 `md2docx.py` 生成。
-4. **`README.md`**（中文）：会议与年份、CCF 等级、出版信息（卷/页码/DOI）、作者与单位、官方页/arXiv/代码/数据链接、一句话概括、与三个关键词的对应、核心贡献（3–5 条）、主要结果的关键数字、阅读建议、文件说明、BibTeX。
+3. **`README.md`**（中文）：会议与年份、CCF 等级、出版信息（卷/页码/DOI）、作者与单位、官方页/arXiv/代码/数据链接、一句话概括、与三个关键词的对应、核心贡献（3–5 条）、主要结果的关键数字、阅读建议、文件说明、BibTeX。
 
 ## 四、当天索引
 
