@@ -1,0 +1,1836 @@
+
+
+===== PAGE 1 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Shunchi Zhang 1 * Jin Lu 1 * Chuanyang Jin 1 * Yichao Zhou 2 * Zhining Zhang 2 Tianmin Shu 1
+https://scai.cs.jhu.edu/MindZero
+/githubCode/da◎abaseData
+ Model
+Abstract
+Effective real-world assistance requires AI agents
+with robust Theory of Mind (ToM): inferring hu-
+man mental states from their behavior. Despite
+recent advances, several key challenges remain,
+including (1) online inference with robust un-
+certainty updates over multiple hypotheses; (2)
+efficient reasoning suitable for real-time assis-
+tance; and (3) the lack of ground-truth mental
+state annotations in real-world domains. We ad-
+dress these challenges by introducingMindZero,
+a self-supervised reinforcement learning frame-
+work that trains multimodal large language mod-
+els (MLLMs) for efficient and robust online men-
+tal reasoning. During training, the model is re-
+warded for generating mental state hypotheses
+that maximize the likelihood of observed actions
+estimated by a planner, similar to model-based
+ToM reasoning. This method thus eliminates the
+need for explicit mental state annotations. Af-
+ter training,MindZerointernalizes model-based
+reasoning into fast single-pass inference. We eval-
+uateMindZeroagainst baselines across challeng-
+ing mental reasoning and AI assistance tasks in
+gridworld and household domains. We found that
+LLMs alone are insufficient; model-based meth-
+ods improve accuracy but are slow, costly, and
+limited by backbone MLLM capacity. In con-
+trast,MindZeroenhances MLLMs’ intrinsic ToM
+ability and significantly outperforms model-based
+methods in both accuracy and efficiency, showing
+that mental reasoning can be effectively learned
+as a self-supervised skill.
+*Equal contribution 1Johns Hopkins University 2Peking Uni-
+versity. Correspondence to: Tianmin Shu <tianmin.shu@jhu.edu>.
+Proceedings of the 43 rd International Conference on Machine
+Learning, Seoul, South Korea. PMLR 306, 2026. Copyright 2026
+by the author(s).
+1. Introduction
+Alice puts a fork on the table
+Prob
+Hypo 1: Put a fork and a piece of
+salmon on the table
+Hypo 2: Put a fork and a
+condiment bottle on the table
+None
+Alice puts a plate on the table
+Prob
+Hypo 1: Put a fork, a plate, and a
+piece of salmon on the table
+Hypo 2: Put two forks and two
+plates on the table
+None
+Alice grabs a second plate
+Prob
+Hypo 1: Put two forks and two
+plates on the table
+Hypo 2: Put a fork, two plates, and
+a piece of salmon on the table
+Grab a second fork and put it
+on the table
+Helper’s
+Action
+Observed
+Main’s
+actions
+Online
+Mental
+Reasoning
+by MindZero
+Figure 1.An example of online mental reasoning for proactive
+assistance, where the helper agent simultaneously infers the the
+main agent’s goal and helps to reach the goal faster. As shown in
+this example, the helper observes the main agent’s actions over
+time,MindZerocontinuously updates a probability distribution
+over multiple goal hypotheses. Based on the multiple possible
+hypotheses maintained at each step, the helper decides whether
+to act and proactively assists by fetching relevant tableware and
+placing it on the table. As new actions are observed, the proba-
+bilities of different mental state hypotheses are updated over time.
+In particular, the transition from step 2 to step 3 shows that the
+main agent grabbing a second plate increases the likelihood of the
+second hypothesis at step 2.
+To proactively assist human users in the real world, AI
+agents must understand users’ minds and anticipate their
+needs. This requires strong Theory of Mind (ToM), i.e., the
+ability to infer users’ mental states (such as desires, beliefs,
+and goals) from their behavior. Recent advances in large lan-
+guage models (LLMs) and multimodal LLMs have sparked
+growing interest in machine Theory of Mind (Wimmer &
+Perner, 1983; Ullman, 2023; Wilf et al., 2024; Sclar et al.,
+2023; Jin et al., 2024). However, much of the existing work
+focuses on question-answering-based ToM evaluation and
+development, which is insufficient for real-world assistance.
+In practice, an assistive agent must continuously update its
+inferences about a user’s mental state and track uncertainty
+over multiple competing hypotheses. This form of online
+mental-state reasoning can guide agent planning, enabling
+proactive assistance, adaptation to changing contexts, and
+more effective collaboration with users.
+1
+arXiv:2606.00240v1  [cs.AI]  29 May 2026
+
+===== PAGE 2 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+For instance, in Figure 1, as the agent observes a human’s
+actions in a household setting, it maintains and updates a
+probability distribution over multiple possible goal hypothe-
+ses in real time, and uses these hypotheses to decide when
+and how to proactively help (e.g., fetching tableware before
+the user asks).
+However, training models for online mental reasoning re-
+mains challenging. Human mental states are latent and often
+ambiguous. They are also dynamically changing over time
+in sequential tasks. For many real-world applications, such
+as household or web assistance, it is extremely difficult and
+costly to collect large-scale training data with reliable an-
+notations of ground-truth mental states. As a result, prior
+works on learning-based ToM methods have been limited to
+controlled settings (Rabinowitz et al., 2018; Rhinehart et al.,
+2019; Bortoletto et al., 2024a;b), lacking open-endedness
+and scalability.
+To circumvent these data and annotation challenges, recent
+work has explored inference-time reasoning methods that
+leverage the generality and strong reasoning ability of LLMs
+for ToM, without requiring model training. In particular,
+when integrated with model-based ToM methods, such as
+Bayesian inverse planning (BIP), inference-time scaling has
+demonstrated strong performance on challenging ToM rea-
+soning tasks (Jin et al., 2024; Shi et al., 2025; Zhang et al.,
+2025; Ying et al., 2023; Kim et al., 2025). These methods
+leverage LLMs to propose and evaluate mental state hy-
+potheses, achieving robust and scalable mental reasoning.
+However, they are computationally prohibitive in online
+mental reasoning required for real-world assistance tasks.
+These challenges call for a new type of ToM approach that
+retains the deliberative structure of model-based reasoning
+while better leveraging the efficiency and learning capacity
+of LLMs.
+To address these limitations, we introduceMindZero, a
+novel Theory of Mind reasoning framework that trains mul-
+timodal language models to perform robust and efficient
+online mental reasoning without requiring mental state an-
+notations. During training, the model explicitly generates
+hypotheses about mental states (e.g., beliefs and goals)
+and is rewarded when these hypotheses assign high like-
+lihood to the actions people actually take. We term this
+Self-Supervised Reinforcement Learning (SSRL). Unlike
+common RL-based language model training, the reward in
+our SSRL method is computed entirely from self-supervised
+signals. It encourages the model to produce explicit mental
+state hypotheses with robust uncertainty estimates. This
+method eliminates the need for ground-truth mental state la-
+bels, allowing the model to learn directly from behavior and
+internalize ToM reasoning patterns that explain actions in
+context. The trainedMindZeromodel infers mental states
+in a single forward pass, while remaining grounded in a
+model-based objective that preserves robustness and inter-
+pretability.
+In our experiments, we comparedMindZeroagainst state-of-
+the-art ToM methods on question answering and proactive
+assistance tasks in both gridworld (Jha et al., 2024) and
+household environments (Puig et al., 2023). Small multi-
+modal language models trained with ourMindZeromethod
+significantly outperformed baselines in all tasks, match-
+ing the robustness of model-based methods while signifi-
+cantly reducing the computational cost. We further validate
+MindZeroin an IRB-approved human study, where it de-
+livers effective real-time assistance to human users using
+a small open-weight backbone. These results suggest that
+mental reasoning can be learned as a self-supervised skill,
+narrowing the gap between robust but slow model-based
+inference and fast but error-prone reasoning by a small mul-
+timodal language model.
+In sum, our main contributions include: (1) a self-supervised
+RL method,MindZero, that trains multimodal language
+models to conduct robust and efficient online mental reason-
+ing without mental state annotations; (2) systematic eval-
+uation ofMindZeroand recent ToM methods in a suite
+of challenging online mental reasoning and proactive AI
+assistance benchmarks.
+2. Related Work
+Theory of Mind Methods.Existing methods for ToM
+reasoning fall into three main categories. (1)Prompting-
+basedapproaches (Jung et al., 2024; Huang et al., 2024; Yu
+et al., 2024; Zhou et al., 2025a; Hou et al., 2024; Sclar et al.,
+2023) improve upon base LLMs but still exhibit systematic
+errors in long-context understanding, complex behaviors,
+and recursive reasoning. (2)Model-basedapproaches, espe-
+cially Bayesian inverse planning (BIP) (Baker et al., 2009;
+Ullman et al., 2009), explicitly model agents’ mental states
+and their influence on behavior. Recent work integrates
+BIP with LLMs (Jin et al., 2024; Shi et al., 2025; Zhang
+et al., 2025), combining structured reasoning with flexible
+language understanding. However, these methods are of-
+ten computationally expensive, as they require searching
+large hypothesis spaces at test time. (3)Learning-based
+methods train neural networks for mental-state inference
+(Rabinowitz et al., 2018; Liang et al., 2024; Sclar et al.,
+2024; Lu et al., 2025), but they rely on costly and unreliable
+ground-truth annotations, limiting their scalability and ap-
+plicability. To address these limitations,MindZerolearns
+mental reasoning directly from human behavior data. Our
+approach improves over prompting-based methods, avoids
+the computational overhead of model-based inference, and
+eliminates the need for explicit mental state annotations
+required by prior learning-based approaches.
+2
+
+===== PAGE 3 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+ToM-Guided AssistanceRecent work on ToM has been
+mainly focused on question-answering tasks (Le et al., 2019;
+Gandhi et al., 2023; Kim et al., 2023; Wu et al., 2023; Xu
+et al., 2024; Jin et al., 2024; Shi et al., 2025; Bortoletto
+et al., 2025a; Fan et al., 2025), where ToM models answer
+questions about mental states based on a story and/or a
+video. In contrast, ToM-guided assistance is more chal-
+lenging: models must continuously infer and update mental
+states while accounting for uncertainty over long horizons
+to support effective assistance. Prior work has explored
+Theory of Mind guided assistance (Puig et al., 2023; Ying
+et al., 2024; Zhi-Xuan et al., 2024; Zhou et al., 2025b; Jin
+et al., 2025; 2026) where an agent helps a human based
+on its understanding of the human’s mind across domains
+such as games, household environments, coding, and real-
+world LLM conversations. Other work studies assistants
+supporting teams with shared goals (Seo et al., 2023; Zhang
+et al., 2024) or partially divergent goals (Bortoletto et al.,
+2025b) through intervention and coordination. A further
+line focuses on situated natural-language collaboration with
+rich social dynamics (Liu et al., 2012; Chai et al., 2014;
+Suhr et al., 2019; Narayan-Chen et al., 2019; Jayannavar
+et al., 2020; Bara et al., 2021; Bortoletto et al., 2025a). Al-
+though there has been prior work on online mental reasoning
+shown to be effective in ToM-guided assistance (e.g., Puig
+et al., 2023; Wang et al., 2021; Shvo et al., 2022; Zhi-Xuan
+et al., 2024; Ying et al., 2024; Cross et al., 2024; Ma et al.,
+2025), they have strong assumptions about human behav-
+ior and/or require high computational costs for complex
+tasks.MindZerodirectly targets this gap by training a small
+multimodal language model to efficiently and robustly con-
+duct online mental reasoning that can support downstream
+assistance tasks in a scalable way.
+3. Problem Formulation
+We formalize the problem of online mental state inference
+(Section 3.1) and characterize how inferred mental states
+can be leveraged to enable proactive assistance (Section 3.2).
+Our formulation provides a unified probabilistic framework
+for reasoning about users’ latent beliefs and goals from
+sequential observations, and for translating this uncertainty-
+aware reasoning into effective assistive decision making in
+dynamic environments.
+3.1. Online Mental Reasoning
+Given a sequence of observed user behavior up to time step
+t, including states s1:t and actions a1:t, a ToM model infers
+the latest mental state of the user mt, which could include
+different mental variables such as beliefs bt and goals gt.
+Inspired by Bayesian inverse planning (BIP) (Baker et al.,
+2009; 2017; Zhi-Xuan et al., 2020), a model-based ToM in-
+ference method, we formalize online mental state inference
+as following Bayesian inference:
+P(m t |s 1:t, a1:t)| {z }
+posterior
+∝P(a 1:t |m t, s1:t)| {z }
+action likelihood
+·P(m t)| {z }
+prior
+,(1)
+Unlike prior work by (Zhi-Xuan et al., 2020), this formu-
+lation goes beyond the typical Markovian assumptions be-
+hind BIP, modeling all past behavior jointly. In real-world
+domains, this Bayesian inference can be computationally
+intractable due to an infinite hypothesis space and costly
+action likelihood estimation (which is achieved via forward
+planning conditioned on hypothetical mental states). Our
+MindZeromethod aims to overcome these computational
+bottlenecks by training a multimodal language model to di-
+rectly output quality hypothesis samples and their posterior
+probabilities without explicit Bayesian inference.
+3.2. Proactive Assistance Guided by Online Mental
+Reasoning
+In online mental reasoning, the model must continuously
+update multiple mental state hypotheses{mt} at every stept
+and estimate their probabilities {qt} given a user’s behavior
+history (s1:t, a1:t). Given the top hypotheses of a user’s
+mental state, an assistive agent can then plan for the assistive
+actions to best help the user. Let aAt be the assistive action
+at time stept. We define the assistive agent’s policy as
+P(a At |s 1:t, a1:t) =X
+mt
+P(a At |s t, mt)P(m t|s1:t, a1:t).
+(2)
+Such assistive decision making must consider the uncer-
+tainty in the mental inference, which requires a robust esti-
+mate of the confidence of multiple hypotheses. It also needs
+to frequently update plans based on the most recent user be-
+havior, and thus needs a fast inference to support real-time
+replanning.MindZeroaims to achieve this via training a
+small multimodal language model with low computational
+cost and latency.
+4.MindZero
+We introduceMindZero, a self-supervised reinforcement
+learning framework that trains multimodal language mod-
+els to perform efficient and robust online mental reason-
+ing.MindZerolearns directly from behavioral data using
+self-supervised signals, addressing the lack of ground-truth
+mental state labels in real-world domains (Section 4.1 and
+Figure 2a). The core ofMindZerois its reward design: the
+model is rewarded for generating mental state hypotheses
+that maximize the likelihood of observed actions, as esti-
+mated by a model-based planner or an LLM, in a manner
+similar to model-based ToM reasoning (Section 4.2 and
+3
+
+===== PAGE 4 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Model
+Reward
+GRPO Update
+User Behavior Model Outputs
+states actions probabilitiesmental states
+(a)Self-Supervised Reinforcement Learning.
+Model Outputs
+(mental state hypotheses
+and their probabilities)
+Action Likelihoods
+(estimated by an LLM or
+a model-based planner)
+Mental Priors
+(provided by an LLM
+or set uniformly) (b)Reward Computation.
+Figure 2.(a) Overview of our Self-Supervised Reinforcement Learning (SSRL) framework. Givenstates s1:t andactions a1:t up to
+timestep t, the model outputs a set of N mental state hypotheses m1:Nt along with theirprobabilities q1:Nt . Unlike standard RL-based
+language model training, SSRL derives rewards entirely from self-supervised signals based on observations and model outputs, which are
+used to guide GRPO updates. (b) Reward computation in SSRL. Given the model outputs, an action likelihood evaluator (either an LLM
+or a model-based planner) estimatesthe likelihood of the observed actionunder each mental state hypothesis, andmental priorsare
+estimated as the likelihood of proposed hypotheses by an LLM or set uniformly. The reward is computed as the probability-weighted
+log-likelihood of the observed action and mental state hypotheses minus an entropy regularization term.
+Figure 2b). Through this process,MindZerointernalizes
+the Bayesian inverse planning procedure in Equation (1)
+and enables real-time planning for proactive assistance as in
+Equation (2).
+4.1. Self-Supervised RL for Mental Reasoning
+Standard supervised approaches to mental reasoning rely
+on ground-truth mental state annotations, which are scarce
+and difficult to collect. Existing self-supervised methods for
+sequential modeling, such as next-token prediction (Ben-
+gio et al., 2003; Radford et al., 2018) and autoregressive
+trajectory modeling (Chen et al., 2021), emphasize forward
+prediction and learn by mimicking future words or actions
+from past context. In contrast, mental reasoning requires
+inverse modeling: explicitly inferring the mental state that
+causes the observed behavior. This capability is not explic-
+itly learned by existing self-supervised objectives, which
+are optimized for prediction rather than explanation.
+To bridge this gap, we formulate mental reasoning as a self-
+supervised reinforcement learning (SSRL) problem centered
+on explanatory consistency. Instead of treating actions as
+prediction targets, we view them as evidence. InMindZero,
+the model is rewarded not for predicting actions directly, but
+for generating mental state hypotheses that maximize the
+likelihood of user actions, thereby providing coherent expla-
+nations of agent behavior. As illustrated in Figure 2a, unlike
+common RL-based language model training, the reward in
+our SSRL method is entirely calculated via self-supervised
+signals from user behavior (without ground-truth mental
+state annotations) and model outputs. Based on this reward,
+we then use GRPO (Shao et al., 2024; Guo et al., 2025) to
+train the model, closing the self-supervised learning loop.
+4.2. Reward Design
+Formally, given a sequence of user behavior (s1:t, a1:t), we
+optimize a multimodal language model Qθ to approximate
+the posterior of mental states mt via variational inference
+(Bishop, 2006). As traversing the full hypothesis space is in-
+tractable, we maximize the Evidence Lower Bound (ELBO)
+(Kingma & Welling, 2014). The optimization objective can
+be formalized as the following reward function:
+J(θ) =E Qθ [log(P(a 1:t |m t, s1:t)·P(m t))] +H(Qθ),
+(3)
+where the P terms denote estimators of theaction likeli-
+hoodandmental state priorin Equation (1); and H(Q θ)
+is the entropy of Qθ. In particular, the entropy term encour-
+ages exploration over mental state hypotheses and prevents
+premature collapse to a single mode, thereby promoting
+robust and diverse posterior approximations.
+In practice, the model Qθ(· |s1:t, a1:t) generates a finite
+set of N mental state hypotheses Mt ={m (1)t , . . . , m(N)t },
+along with their normalized posterior probabilities Qt =
+{q(1)t , . . . , q(N)t } such that PNi=1 q(i) = 1. We treat these
+N candidates as the effective support of the variational
+posterior. Consequently, the likelihood, prior, and entropy
+terms in Equation (3) are computed as weighted sums:
+R(Mt,Q t) =
+NX
+i=1
+q(i)t [log(P(a 1:t |m (i)t , s1:t)·P(m (i)t ))]
+−
+NX
+i=1
+q(i)t logq (i)t .
+(4)
+4
+
+===== PAGE 5 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Action Likelihood.Action likelihood measures how prob-
+able the observed actions are under a given mental state
+hypothesis. Specifically, P (i)t =P(a 1:t |m (i)t , s1:t) com-
+putes the likelihood of the action sequence up to time t ,
+given the observed states s1:t and a proposed mental state
+hypothesis m(i)t . This likelihood can be estimated using
+either a model-based planner (as in the GridWorld domain
+in Section 5.1 and 5.2) or an LLM (as in the Household
+domain in Section 5.3 and 5.4).
+Mental State Prior .Mental state prior P(m t) represents
+the prior probabilities assigned to different mental state
+hypotheses mt. These priors can be either uniform or non-
+uniform to incorporate prior knowledge from symbolic rules
+or LLMs, helping constrain the hypothesis space. For ex-
+ample, in a household environment, goals such as placing
+food into a dishwasher or setting the table with vastly mis-
+matched numbers of plates and cutlery would be assigned a
+low prior probability. This effectively prevents the model
+from generating hypotheses that violate common sense at
+the proposal stage.
+In summary, to produce hypotheses with high action like-
+lihoods, high mental state priors, and consequently, high
+rewards, the proposed mental states must be explicit and
+meaningful for both estimators for the action likelihood
+and the mental state prior. This then encourages the model
+to learn to propose explicit and meaningful mental states
+through RL training. In the meantime, with the entropy
+bonus objective, the hypothesis distribution would remain
+diverse and robust. As a result, the model can learn to con-
+duct explicit online mental reasoning without the need for
+ground-truth mental state annotations.
+5. Experimental Setup
+As shown in Figure 3, we systematically evaluateMindZero
+and baseline methods across four experimental settings:
+(1) GridWorld Question Answering (Section 5.1), (2) Grid-
+World Proactive Assistance (Section 5.2), (3) Household
+Question Answering (Section 5.3), and (4) Household Proac-
+tive Assistance (Section 5.4). The question answering set-
+tings focus on directly answering ToM-related questions
+about humans’ mental states, whereas the assistance set-
+tings require fast, online mental reasoning about human
+behavior to provide proactive and accurate support. We list
+the evaluated models and baselines in Section 5.5.
+5.1. GridWorld Question Answering
+We adapt theConstructionenvironment (Jha et al., 2024),
+a 2D grid world where agents navigate around obstacles
+(e.g., walls) and carry colored objects to different locations.
+Here, a human agent aims to assemble two blocks of specific
+colors by picking up one and moving it toward the other. The
+model must infer the human’s intended goal, specifically
+which two colored blocks the human intends to assemble,
+given a partial trajectory of diverse human action patterns.
+Beyond mental-state reasoning, the task also requires visual
+grounding: the model must map the question and trajectory
+to the correct colored blocks in the scene. This goes beyond
+prior ToM QA benchmarks, which are largely story-based
+and do not require vision-language grounding.
+When trainingMindZeroin the GridWorld domain, we
+assume a uniform prior over the reward defined in Equa-
+tion (4) and use a model-based planner to estimate action
+likelihoods.
+5.2. GridWorld Proactive Assistance
+Using the sameConstructionenvironment as in Section 5.1,
+we define a proactive assistance task in which a human
+agent aims to assemble two blocks of specific colors, while
+a helper agent must continuously observe the human’s ac-
+tions, infer the intended goal, and assist in completing it
+more efficiently. We evaluate helping performance using
+speedup, which measures how much the helper accelerates
+the human’s task completion; metric details are provided in
+Appendix A.2. Implementation and data generation details
+are provided in Appendix B.
+The proactive assistance setting introduces several chal-
+lenges beyond story-based evaluation: (1) reasoning must
+occur atevery timestep, rather than at a single queried mo-
+ment; (2) the model must generatediverse yet plausible
+hypotheses from scratch, rather than selecting from pro-
+vided choices; and (3) the assistant must performonline
+goal inference under ambiguity, identifying the user’s goal
+early enough to provide timely help, but not so early that
+it commits to an incorrect hypothesis. Delayed inference
+limits effective assistance, while premature and incorrect
+inference can incurlarge penaltieswhen the assistant helps
+toward the wrong goal and later revises its belief.
+5.3. Household Question Answering
+We evaluate household question answering using MMToM-
+QA (Jin et al., 2024), a multimodal benchmark that includes
+questions covering the beliefs and goals of a person search-
+ing for an object (e.g., a remote controller) in a household
+environment. The task is challenging because it requires
+joint inference of both beliefs and goals with both visual
+and textual inputs.
+For the household domain, we adopt the information fusion
+methods proposed by Jin et al. (2024) and (Shi et al., 2025)
+to combine visual and textual inputs, resulting in fused rep-
+resentations in text form. All methods receive the same
+fused information as input. When trainingMindZero, we
+use the same pretrained LLM to estimate both the prior
+5
+
+===== PAGE 6 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+GridWorld
+Household
+Question Answering
+Proactive Assistance
+Question Answering
+Proactive Assistance
+Question:
+ 
+Given
+ 
+that
+ 
+the
+ 
+Human
+intends
+ 
+to
+ 
+place
+ 
+an
+ 
+object
+ 
+next
+ 
+to
+the
+ 
+purple
+ 
+star,
+ 
+which
+ 
+object
+ 
+is
+ 
+the
+Human
+ 
+more
+ 
+likely
+ 
+to
+ 
+pick
+ 
+up
+ 
+next?
+(a) 
+red star.
+(b) 
+blue star.
+Human
+ 
+agent:
+ 
+Assemble
+the
+ 
+green
+ 
+and
+ 
+red
+ 
+blocks.
+Helper
+ 
+agent:
+ 
+Infer
+ 
+the
+Human's
+ 
+goal
+ 
+and
+ 
+assist
+ 
+in
+reaching
+ 
+it
+ 
+more
+ 
+efficiently.
+Scene:
+ 
+…the
+ 
+refrigerator
+ 
+contains
+ 
+two
+ 
+dish
+bowls
+ 
+and
+ 
+a
+ 
+cupcake.
+Actions:
+ 
+Mary
+ 
+walks
+ 
+towards
+ 
+the
+ 
+fridge
+ 
+and
+opens
+ 
+it.
+Question:
+ 
+If
+ 
+Mary
+ 
+has
+ 
+been
+ 
+trying
+ 
+to
+ 
+get
+ 
+a
+cupcake,
+ 
+which
+ 
+one
+ 
+of
+ 
+the
+ 
+following
+ 
+statements
+is
+ 
+more
+ 
+likely
+ 
+to
+ 
+be
+ 
+true?
+(a)
+ 
+Mary
+ 
+thinks
+ 
+that
+ 
+the
+ 
+cupcake
+ 
+is
+ 
+not
+ 
+inside
+the
+ 
+refrigerator.
+(b)
+ 
+Mary
+ 
+thinks
+ 
+that
+ 
+the
+ 
+cupcake
+ 
+is
+ 
+inside
+ 
+the
+refrigerator.
+Main
+ 
+agent:
+ 
+Set
+ 
+up
+ 
+a
+ 
+dinner
+table
+ 
+with
+ 
+specific
+ 
+tableware.
+Helper
+ 
+agent:
+ 
+Infer
+ 
+Main's
+goal
+ 
+and
+ 
+help
+ 
+reach
+ 
+the
+ 
+goal
+faster.
+Figure 3.Our experimental settings for mental state reasoning and proactive assistance: (1) GridWorld Question Answering (Section 5.1);
+(2) GridWorld Proactive Assistance (Section 5.2); (3) Household Question Answering (Section 5.3); and (4) Household Proactive
+Assistance (Section 5.4).
+and action likelihood terms in the reward defined in Equa-
+tion (4). For the prior term, the LLM directly outputs log
+prior probabilities by judging whether a goal is plausible
+in the context of a household task. This incorporates com-
+monsense knowledge from the pretrained LLM and helps
+constrain the goal space. Training data generation details
+are provided in Appendix C.
+5.4. Household Proactive Assistance
+We evaluate household assistance using the embodied bench-
+mark Online Watch-And-Help (O-W AH) (Puig et al., 2023),
+where a helper agent observes a human’s actions, infers
+the intended goal, and assists in completing it more effi-
+ciently in realistic household environments. In this task,
+the helper agent must update its goal inference based on
+the latest observations in an online manner. At each step,
+we use the uncertainty-aware helping planner proposed in
+Puig et al. (2023) to generate assistance actions based on the
+inferred goals. To evaluate generalization, we use different
+apartments for training and testing. To reduce variance, the
+results are reported as the average over 3 runs per episode.
+We include experiment details in Appendix C.
+Besides the challenges of proactive assistance described in
+Section 5.2, the Household setting introduces additional dif-
+ficulties: (1) a much larger state, action, and goal space (e.g.,
+uncertainty over which objects are needed, how many are
+required, and their target locations); (2) partial observability,
+whereas GridWorld is fully observable; and (3) significantly
+longer episode horizons.
+5.5. Models and Baselines
+We compareMindZeroagainst the following baselines:
+• Base models:For the GridWorld domain (Section 5.1–
+5.2), we use the open-weight multimodal models Qwen3-
+VL-4B and Qwen3-VL-8B (Yang et al., 2025). For the
+Household domain (Section 5.3–5.4), we use the open-
+weight language models Llama-3.1-8B, Llama-3.2-3B
+(Dubey et al., 2024), and Qwen3-4B (Yang et al., 2025),
+using fused textual inputs.
+• Large models:Additionally, we evaluate Qwen3-235B-
+A22B, GPT-5.2, and Gemini-3 as zero-shot performance
+of large models. For question answering, we report results
+with both the thinking and non-thinking version of the
+models. For proactive assistance, we report only the non-
+thinking results, as it requires models to make decisions
+in the real time.
+• Test-time scaling methods:We evaluateThoughtTrac-
+ing(Kim et al., 2025), a test-time reasoning approach
+for mental-state tracking that maintains and updates mul-
+tiple hypotheses, andAutoToM(Zhang et al., 2025), a
+model-based method for automated agent modeling. Both
+are instantiated with the open-source base models listed
+above. We do not evaluate them in the Proactive Assis-
+tance domains due to their slow inference speed, which
+limits real-time applicability. As they do not support vi-
+sual inputs, we provide textual transcripts of GridWorld
+observations. We describe implementation details in Ap-
+pendix E.
+6
+
+===== PAGE 7 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+0
+25
+50
+75
+100Accuracy (%)
+37.7
+95.0
+43.3
+92.3
+68.0
+2.5x 2.1x
+(Single-Pass) Base LLM
+(Single-Pass) MindZero
+Random
+(Multi-Pass) ThoughtTracing
+(Multi-Pass) AutoToM
+Qwen3-VL-4B Qwen3-VL-8B SoTA MLLMs
+101
+102
+103
+TFLOPs
+Proprietary
+(a)GridWorld Question Answering
+0
+25
+50
+75
+100Accuracy (%)
+34.8
+77.8
+41.3
+76.2
+42.8
+72.7
+80.2
+2.2x 1.8x 1.7x
+(Single-Pass) Base LLM
+(Single-Pass) MindZero
+Random
+(Multi-Pass) ThoughtTracing
+(Multi-Pass) AutoToM
+Llama-3.2-3B Llama-3.1-8B Qwen3-4B SoTA LLMs
+101
+102
+103
+TFLOPs
+Proprietary (b)Household Question Answering
+Figure 4.Question answering results ofMindZeroand baselines on (a) GridWorld and (b) Household domains.MindZeroachieves a
+1.7–2.5× accuracy (solid bars) gain across different base models with negligible additional inference cost (hatched bars), and consistently
+outperforms all test-time scaling baselines in both accuracy and efficiency. Full results are shown in Table 4.
+For a fair comparison, we evaluateMindZerousing the
+same open-source base models described above.
+6. Experimental Results
+6.1. Overall Results
+Question AnsweringAs shown in Figure 4,MindZero
+consistently outperforms pretrained and test-time scaling
+baselines in both GridWorld QA (Figure 4a) and Household
+QA (Figure 4b), while maintaining low inference cost.
+In GridWorld QA,MindZeroachieves the best accuracy
+among all methods with both Qwen3-VL-4B and Qwen3-
+VL-8B, substantially improving over their base models and
+delivering a 2.1–2.5×accuracy gain.
+In Household QA,MindZerolikewise achieves strong per-
+formance across all base models, withMindZerow/ Llama-
+3.2-3B attaining the highest accuracy among open-weight
+and test-time scaling methods and remaining competitive
+with the best proprietary systems despite minimal inference
+cost. Compared withThoughtTracingandAutoToM, which
+require substantially more test-time computation,MindZero
+delivers a clearly better accuracy-efficiency trade-off, even
+when those methods use much larger backend models.
+Proactive AssistanceAs shown in Table 1,MindZero
+achieves the best performance among all and yields substan-
+tial gains from base models in task completion speed in both
+GridWorld Proactive Assistance (Table 1a) and Household
+Proactive Assistance (Table 1b), where all baselines provide
+little to no speedup.
+In GridWorld Proactive Assistance,MindZeroachieves
+23.0% and 24.5% speedup with Qwen3-VL-4B and Qwen3-
+VL-8B, respectively. In contrast, GPT-5.2 and Gemini-3-
+Flash yield no speedup, as their goal predictions change
+constantly, causing the agent’s actions to become unstable
+(i.e., frequently changing directions). As a result, the agent
+fails to pick up an object before the task ends.
+In Household Proactive Assistance,MindZerowith Qwen3-
+4B achieves a best speedup of 19.1%, significantly higher
+than the strongest baseline with the least inference cost. A
+notable exception isMindZerowith Llama-3.2-3B, which
+does not show a significant gain over its base model. This is
+because it cannot produce goal hypotheses in the required
+format, we first fine-tune it on generations sampled from the
+pretrained Llama-3.1-8B before RL training, avoiding any
+reliance on ground-truth or pseudo labels. However, while
+this warm-up teaches the correct format, the relatively low
+quality of the sampled generations appears to be memorized
+as well, introducing a bias that ultimately suppresses the
+expected improvement.
+6.2. Online Goal Inference Dynamics
+Figure 5 shows the accuracy of online goal inference as
+task progress increases in both GridWorld and Household
+Proactive Assistance. In both settings,MindZerosteadily
+improves its goal prediction over time, indicating that it
+can effectively accumulate evidence from ongoing inter-
+action and refine its belief about the user’s objective. In
+GridWorld (Figure 5a),MindZerois the only method whose
+accuracy rises substantially as the task unfolds, eventually
+reaching a strong level. In contrast, all baselines remain
+very low for most of the trajectory and only increase in
+accuracy near the end, making effective assistance difficult.
+In Household (Figure 5b),MindZeroagain achieves the
+7
+
+===== PAGE 8 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Table 1.Proactive assistance results ofMindZero, base models, and large models on (a) Gridworld and (b) Household domains. Best
+results are shown inbold. * indicate models that cannot generate goal hypotheses in the correct format at all, and need to be finetuned to
+follow output format before the RL training.
+(a)Gridworld Proactive Assistance
+Method Speedup↑TFLOPs↓
+Random Goal 0.0 N/A
+Base Models
+Qwen3-VL-4B 1.4151.7
+Qwen3-VL-8B -0.1 295.2
+Large Models
+Qwen3-VL-235B-A22B 1.0 808.6
+GPT-5.2 0.0 Proprietary
+Gemini-3-Flash 0.0 Proprietary
+MindZero(Ours)
+w/ Qwen3-VL-4B 23.0 161.4
+w/ Qwen3-VL-8B24.5291.8
+(b)Household Proactive Assistance
+Method Speedup↑TFLOPs↓
+Random Goal -2.2 N/A
+Base Models
+Llama-3.2-3B* 2.3 244.3
+Llama-3.1-8B 1.7 656.1
+Qwen3-4B 2.3 213.1
+Large Models
+Qwen3-235B-A22B 12.3 1101.6
+GPT-5.2 9.4 Proprietary
+Gemini-3-Flash 17.7 Proprietary
+MindZero(Ours)
+w/ Llama-3.2-3B* 4.3 235.1
+w/ Llama-3.1-8B 17.4 608.4
+w/ Qwen3-4B19.1 201.2
+0 20 40 60 80 100
+Task Progress (%)
+0
+20
+40
+60
+80
+100Top-2 Goal Accuracy (%)
+MindZero (Qwen3-VL-4B)
+MindZero (Qwen3-VL-8B)
+SOTA VLMs (Gemini-3-Flash)
+Qwen3-VL-4B
+Qwen3-VL-8B
+Qwen3-VL-235B-A22B
+(a)GridWorld Proactive Assistance
+20 40 60 80 100
+Task Progress (%)
+0
+20
+40
+60
+80
+100F1 Score (%)
+MindZero (Llama-3.2-3B)
+MindZero (Llama-3.1-8B)
+MindZero (Qwen3-4B)
+SoTA LLMs
+Llama-3.2-3B
+Llama-3.2-8B
+Qwen3-4B (b)Household Proactive Assistance
+Figure 5.Goal accuracy or F1 score for online goal inference versus task progress across (a) GridWorld and (b) Household proactive
+assistance.MindZero’s (bold solid curves) predicted goal steadily improves in accuracy over time and reaches a strong level, while most
+baselines (dashed curves) remain much lower or improve more slowly.
+strongest performance, with prediction accuracy increas-
+ing consistently, significantly outperforming base models
+and matching much larger pretrained models. These results
+suggest that accurate and stable online goal inference is a
+key reason whyMindZerocan deliver effective proactive
+assistance.
+6.3. Ablation Study
+To understand the key components drivingMindZero’s per-
+formance, we conduct comprehensive ablation studies on
+Qwen3-4B, as shown in Table 2. We examine three crit-
+ical design choices: prior modeling, multiple hypotheses,
+and entropy bonus. All experiments use the same training
+configuration as our main experiments.
+Explicit Prior ModelingIn the household environment,
+humans are assumed to pursue a set of predefined goal
+types, such as setting up the dinner table or putting dishes
+in the dishwasher. We explicitly require an LLM to check
+whether each goal hypothesis is reasonable. For example,
+putting an apple into the dishwasher will be assigned a very
+low score. This constraint is key to generating plausible
+hypotheses and prevents reward hacking of action likelihood,
+e.g., including every possible item in the goal yields a high
+8
+
+===== PAGE 9 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Table 2.Ablation on Household Proactive Assistance using Qwen3-
+4B.
+# Method Speedup↑TFLOPs↓
+IMindZero19.1201.2
+II w/o prior modeling 17.0 200.5
+III w/o multiple hypotheses 10.3132.6
+IV w/o entropy bonus 5.2 245.1
+action-likelihood score but a low prior score. Compared to
+the full model (Row I), the speedup drops by 2.1% without
+explicit prior modeling (Row II).
+Multiple HypothesesMaintaining a set of mental state
+hypotheses is important for capturing the uncertainty of
+understanding human behavior. For example, in the early
+stage of an episode, the assistant can only observe a limited
+human behavior, thus each hypothesis remains ambiguous
+and carries low confidence. Relying on a single estimation
+would lead to premature commitment to a potentially incor-
+rect goal. By tracking a beam of hypotheses, the system can
+defer the decision until sufficient evidence is accumulated.
+Compared to the full model (Row I), the speedup drops for
+8.8% comparing to generating a single most possible mental
+state (Row III). Accordingly, the token usage is the least.
+Entropy BonusHypothesis distribution often suffers
+from mode collapse, where the model becomes overcon-
+fident in a single prediction too early. To mitigate this, the
+entropy regularization term in Equation (3) encourages the
+diversity of the hypothesis space. This bonus penalizes
+overly peaked distributions and ensures the model retains
+alternative possibilities during reasoning. Compared to the
+full model (Row I), the speedup drops for 13.9% without
+the entropy bonus (Row IV).
+6.4. Human Experiment
+To evaluate whetherMindZerocan support real users, we
+conducted a human experiment in the Household Proactive
+Assistance domain. Participants acted as the main agent
+and completed four household tasks from our test set. We
+recruited 12 participants from Johns Hopkins University.
+The study was approved by the JHU institutional review
+board.
+Experimental Setup.We compare four settings: a Single
+Human without assistance, and assistance with Qwen3-4B,
+withMindZerotrained from Qwen3-4B, and with Gemini-
+3-Flash. The Single Human setting serves as the reference
+for computing speedup. All assisted settings use the same
+helper-agent pipeline as in the Household Proactive Assis-
+tance experiments, varying only the mental inference model.
+Results.The pretrained Qwen3-4B model yields only a
+marginal speedup of 2.6%. In contrast,MindZerotrained
+from Qwen3-4B achieves a speedup of 19.7% (standard er-
+ror 6.3%), a substantial improvement over the same Qwen3-
+4B backbone. Gemini-3-Flash achieves a speedup of 23.4%
+(standard error 6.4%). Although Gemini-3-Flash attains
+a slightly higher mean speedup, the difference between
+Gemini-3-Flash andMindZerois not statistically significant
+under a paired t-test on speedup (p= 0.24), consistent with
+the results in Section 6.
+These results show thatMindZerotransfers to real hu-
+man behavior and provides effective assistance.MindZero
+reaches performance comparable to Gemini-3-Flash while
+using a small open-weight model, making it easier to deploy
+locally and more cost-effective for large-scale assistance.
+7. Conclusion
+We introducedMindZero, a self-supervised reinforcement
+learning framework for training multimodal language mod-
+els to perform robust and efficient online Theory of Mind
+reasoning without relying on mental state annotations. By
+rewarding hypotheses that best explain observed behavior,
+MindZeroenables models to internalize the deliberative
+structure of model-based ToM while retaining the speed of
+single-pass inference. Extensive evaluations across question
+answering and proactive assistance tasks demonstrate that
+MindZeroachieves strong robustness and uncertainty track-
+ing comparable to explicit model-based methods, while sub-
+stantially reducing computational cost. These results show
+that mental reasoning can be learned as a self-supervised
+skill grounded in behavioral evidence, bridging the long-
+standing gap between interpretability, robustness, and effi-
+ciency in ToM modeling. We believeMindZeroprovides
+a promising foundation for scalable, real-world assistive
+agents that can continuously reason about human intentions
+and adapt to dynamic environments.
+Limitations and Future Work.Our currentMindZero
+framework does not model recursive reasoning between
+multiple agents. Additionally, as the input sequence length
+increases, the required input token length for the model will
+increase accordingly. In the future, we intend to expand
+MindZeroto incorporate multi-agent recursive mental rea-
+soning into the training process. We also plan to develop a
+more efficient model structure to address the challenge of
+long input sequences.
+9
+
+===== PAGE 10 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Impact Statement
+This paper presents work aimed at advancing the field of
+machine learning by developing more robust and efficient
+methods for online Theory of Mind reasoning in assistive
+AI systems. By enabling models to infer human intentions
+and uncertainty from behavior without relying on explicit
+annotations, our approach has the potential to enhance the
+reliability, responsiveness, and scalability of AI agents in
+real-world applications such as household assistance, digital
+services, and human–computer interaction. These advances
+may contribute to more helpful, adaptive, and accessible
+technologies that better align with users’ needs and prefer-
+ences, thereby improving user experience and productivity.
+At the same time, enhanced mental reasoning capabilities
+may raise ethical considerations. Systems that more accu-
+rately model human intentions and beliefs may be misused
+for manipulation, surveillance, or unwanted behavioral pro-
+filing if deployed without appropriate safeguards. Moreover,
+errors in inferred mental states could result in inappropriate
+assistance, reduced user autonomy, or the reinforcement
+of existing biases present in behavioral data. We empha-
+size that responsible use requires transparency, user consent,
+and careful evaluation in real-world settings. We hope this
+research encourages further discussion on the ethical de-
+velopment and deployment of human-centered AI systems
+and supports future work on fairness, accountability, and
+privacy-preserving mental reasoning models.
+Author Contributions
+Shunchi Zhang conceived the idea and developed it into the
+present work; he carried out the main environment setup,
+data processing, model training, and evaluation, including
+the extensive exploratory experiments and the core exper-
+imental results reported in the paper. Jin Lu conducted
+a large number of additional experiments, primarily base-
+lines and supplementary studies; he also independently per-
+formed the human study, contributed to the early-stage ex-
+ploration of the GridWorld experiments, and carried out
+exploratory work on web assistance that informed the fi-
+nal design. Chuanyang Jin contributed to paper writing
+and figure design. Yichao Zhou implemented the Grid-
+World environment setup, data processing, model training,
+and evaluation, under Shunchi Zhang’s assistance. Zhin-
+ing Zhang contributed the AutoToM-related experiments.
+Tianmin Shu provided overall research direction and weekly
+guidance and contributed to the paper revision. All authors
+contributed to the paper writing.
+Acknowledgement
+This work is supported by a grant from Amazon. Chuanyang
+Jin is supported by the Amazon AI PhD Fellowship.
+References
+Baker, C. L., Saxe, R., and Tenenbaum, J. B. Action under-
+standing as inverse planning. Cognition, 113(3):329–349,
+2009. 2, 3
+Baker, C. L., Jara-Ettinger, J., Saxe, R., and Tenenbaum,
+J. B. Rational quantitative attribution of beliefs, de-
+sires and percepts in human mentalizing. Nature Human
+Behaviour, 1(4):0064, 2017. 3
+Bara, C.-P., Sky, C.-W., and Chai, J. Mindcraft: Theory
+of mind modeling for situated dialogue in collaborative
+tasks. In Proceedings of the Conference on Empirical
+Methods in Natural Language Processing (EMNLP), pp.
+1112–1125, 2021. 3
+Bengio, Y ., Ducharme, R., Vincent, P., and Jauvin, C. A
+neural probabilistic language model. Journal of Machine
+Learning Research (JMLR), 3(Feb):1137–1155, 2003. 4
+Bishop, C. M. Pattern recognition and machine learning.
+Springer, 2006. 4
+Bortoletto, M., Ruhdorfer, C., Shi, L., and Bulling, A.
+Explicit modelling of theory of mind for belief predic-
+tion in nonverbal social interactions. arXiv preprint
+arXiv:2407.06762, 2024a. 2
+Bortoletto, M., Shi, L., and Bulling, A. Neural rea-
+soning about agents’ goals, preferences, and actions.
+In Proceedings of the AAAI Conference on Artificial
+Intelligence (AAAI), volume 38, pp. 456–464, 2024b.
+2
+Bortoletto, M., Ruhdorfer, C., and Bulling, A. Tom-ssi:
+Evaluating theory of mind in situated social interactions.
+In Proceedings of the Conference on Empirical Methods
+in Natural Language Processing (EMNLP), pp. 32252–
+32277, 2025a. 3
+Bortoletto, M., Zhou, Y ., Ying, L., Shu, T., and Bulling,
+A. Protom: Promoting prosocial behaviour via
+theory of mind-informed feedback. arXiv preprint
+arXiv:2509.05091, 2025b. 3
+Chai, J. Y ., She, L., Fang, R., Ottarson, S., Littley, C., Liu,
+C., and Hanson, K. Collaborative effort towards common
+ground in situated human-robot dialogue. In Proceedings
+of the 2014 ACM/IEEE international conference on
+Human-robot interaction, pp. 33–40, 2014. 3
+Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A.,
+Laskin, M., Abbeel, P., Srinivas, A., and Mordatch, I. De-
+cision transformer: Reinforcement learning via sequence
+modeling. In Advances in Neural Information Processing
+Systems (NeurIPS), volume 34, pp. 15084–15097, 2021.
+4
+10
+
+===== PAGE 11 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Cross, L., Xiang, V ., Bhatia, A., Yamins, D. L., and Haber,
+N. Hypothetical minds: Scaffolding theory of mind for
+multi-agent tasks with large language models. arXiv
+preprint arXiv:2407.07086, 2024. 3
+Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle,
+A., Letman, A., Mathur, A., Schelten, A., Yang, A., Fan,
+A., et al. The llama 3 herd of models. arXiv e-prints, pp.
+arXiv–2407, 2024. 6
+Fan, X., Zhou, X., Jin, C., Nottingham, K., Zhu, H., and
+Sap, M. Somi-tom: Evaluating multi-perspective theory
+of mind in embodied social interactions. In Advances
+in Neural Information Processing Systems Datasets and
+Benchmarks (NeurIPS D&B), 2025. 3
+Gandhi, K., Fränken, J.-P., Gerstenberg, T., and Good-
+man, N. Understanding social reasoning in language
+models with language models. In Advances in Neural
+Information Processing Systems (NeurIPS), volume 36,
+pp. 13518–13529, 2023. 3
+Guo, D., Yang, D., Zhang, H., Song, J., Wang, P., Zhu,
+Q., Xu, R., Zhang, R., Ma, S., Bi, X., et al. Deepseek-
+r1 incentivizes reasoning in llms through reinforcement
+learning. Nature, 645(8081):633–638, 2025. 4
+Hou, G., Zhang, W., Shen, Y ., Wu, L., and Lu, W. Time-
+tom: Temporal space is the key to unlocking the door of
+large language models’ theory-of-mind. In Findings of
+the Association for Computational Linguistics: ACL, pp.
+11532–11547, 2024. 2
+Huang, X. A., La Malfa, E., Marro, S., Asperti, A., Cohn,
+A. G., and Wooldridge, M. J. A notion of complexity for
+theory of mind via discrete world models. In Findings of
+the Association for Computational Linguistics: EMNLP,
+pp. 2964–2983, 2024. 2
+Jayannavar, P., Narayan-Chen, A., and Hockenmaier, J.
+Learning to execute instructions in a minecraft dia-
+logue. In Proceedings of the 58th annual meeting of the
+association for computational linguistics, pp. 2589–2602,
+2020. 3
+Jha, K., Le, T. A., Jin, C., Kuo, Y .-L., Tenenbaum, J. B., and
+Shu, T. Neural amortized inference for nested multi-agent
+reasoning. In Proceedings of the AAAI Conference on
+Artificial Intelligence (AAAI), volume 38, pp. 530–537,
+2024. 2, 5
+Jin, C., Wu, Y ., Cao, J., Xiang, J., Kuo, Y .-L., Hu, Z., Ull-
+man, T., Torralba, A., Tenenbaum, J., and Shu, T. Mmtom-
+qa: Multimodal theory of mind question answering. In
+Proceedings of the Annual Meeting of the Association
+for Computational Linguistics (ACL), pp. 16077–16102,
+2024. 1, 2, 3, 5, 18
+Jin, C., Xu, J., Liu, B., Tao, L., Golovneva, O., Shu, T.,
+Zhao, W., Li, X., and Weston, J. The era of real-world
+human interaction: Rl from user conversations. arXiv
+preprint arXiv:2509.25137, 2025. 3
+Jin, C., Li, B., Xie, H., Fang, C. M., Li, T., Longpre, S., Gu,
+H., Chen, M., and Shu, T. Thoughttrace: Understand-
+ing user thoughts in real-world llm interactions. arXiv
+preprint arXiv:2605.20087, 2026. 3
+Jung, C., Kim, D., Jin, J., Kim, J., Seonwoo, Y ., Choi, Y .,
+Oh, A., and Kim, H. Perceptions to beliefs: Exploring
+precursory inferences for theory of mind in large language
+models. In Proceedings of the Conference on Empirical
+Methods in Natural Language Processing (EMNLP), pp.
+19794–19809, 2024. 2
+Kaplan, J., McCandlish, S., Henighan, T., Brown, T. B.,
+Chess, B., Child, R., Gray, S., Radford, A., Wu, J., and
+Amodei, D. Scaling laws for neural language models.
+arXiv preprint arXiv:2001.08361, 2020. 14
+Kim, H., Sclar, M., Zhou, X., Bras, R., Kim, G., Choi,
+Y ., and Sap, M. Fantom: A benchmark for stress-
+testing machine theory of mind in interactions. In
+Proceedings of the Conference on Empirical Methods
+in Natural Language Processing (EMNLP), pp. 14397–
+14413, 2023. 3
+Kim, H., Sclar, M., Zhi-Xuan, T., Ying, L., Levine, S., Liu,
+Y ., Tenenbaum, J. B., and Choi, Y . Hypothesis-driven
+theory-of-mind reasoning for large language models. In
+Proceedings of the Conference on Language Modeling
+(COLM), 2025. 2, 6, 21
+Kingma, D. P. and Welling, M. Auto-encoding variational
+bayes. In Proceedings of the International Conference
+on Learning Representations (ICLR), 2014. 4
+Le, M., Boureau, Y .-L., and Nickel, M. Revisiting
+the evaluation of theory of mind through question
+answering. In Proceedings of the Conference on
+Empirical Methods in Natural Language Processing and
+the International Joint Conference on Natural Language
+Processing (EMNLP-IJCNLP), pp. 5872–5877, 2019. 3
+Liang, Y ., Chen, D., Gupta, A., Du, S. S., and Jaques,
+N. Learning to cooperate with humans using generative
+agents. In Advances in Neural Information Processing
+Systems (NeurIPS), volume 37, pp. 60061–60087, 2024.
+2
+Liu, C., Fang, R., and Chai, J. Towards mediating shared
+perceptual basis in situated dialogue. In Proceedings of
+the 13th Annual Meeting of the Special Interest Group
+on Discourse and Dialogue, pp. 140–149, 2012. 3
+11
+
+===== PAGE 12 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Lu, Y .-L., Zhang, C., Song, J., Fan, L., and Wang, W.
+Do theory of mind benchmarks need explicit human-
+like reasoning in language models? arXiv preprint
+arXiv:2504.01698, 2025. 2
+Ma, C., Lu, K., Desai, R., Puig, X., Markham, A., and
+Trigoni, N. Coopera: Continual open-ended human-robot
+assistance. arXiv preprint arXiv:2510.23495, 2025. 3
+Narayan-Chen, A., Jayannavar, P., and Hockenmaier, J.
+Collaborative dialogue in minecraft. In Proceedings
+of the 57th Annual Meeting of the Association for
+Computational Linguistics, pp. 5405–5415, 2019. 3
+Puig, X., Shu, T., Li, S., Wang, Z., Liao, Y .-H., Tenenbaum,
+J. B., Fidler, S., and Torralba, A. Watch-and-help: A
+challenge for social perception and human-ai collabora-
+tion. In Proceedings of the International Conference on
+Learning Representations (ICLR), 2021. 18
+Puig, X., Shu, T., Tenenbaum, J. B., and Torralba, A. Nopa:
+Neurally-guided online probabilistic assistance for build-
+ing socially intelligent home assistants. In Proceedings
+of the IEEE International Conference on Robotics and
+Automation (ICRA), pp. 7628–7634. IEEE, 2023. 2, 3, 6
+Rabinowitz, N., Perbet, F., Song, F., Zhang, C., Eslami,
+S. A., and Botvinick, M. Machine theory of mind. In
+Proceedings of the International Conference on Machine
+Learning (ICML), pp. 4218–4227. PMLR, 2018. 2
+Radford, A., Narasimhan, K., Salimans, T., Sutskever, I.,
+et al. Improving language understanding by generative
+pre-training. 2018. 4
+Rhinehart, N., McAllister, R., Kitani, K., and Levine, S. Pre-
+cog: Prediction conditioned on goals in visual multi-agent
+settings. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision (ICCV), pp. 2821–2830,
+2019. 2
+Sclar, M., Kumar, S., West, P., Suhr, A., Choi, Y ., and
+Tsvetkov, Y . Minding language models’(lack of) theory
+of mind: A plug-and-play multi-character belief tracker.
+In Proceedings of the Annual Meeting of the Association
+for Computational Linguistics (ACL), pp. 13960–13980,
+2023. 1, 2
+Sclar, M., Yu, J., Fazel-Zarandi, M., Tsvetkov, Y ., Bisk, Y .,
+Choi, Y ., and Celikyilmaz, A. Explore theory of mind:
+Program-guided adversarial data generation for theory of
+mind reasoning. arXiv preprint arXiv:2412.12175, 2024.
+2
+Seo, S., Han, B., and Unhelkar, V . Automated task-time in-
+terventions to improve teamwork using imitation learning.
+arXiv preprint arXiv:2303.00413, 2023. 3
+Shao, Z., Wang, P., Zhu, Q., Xu, R., Song, J., Bi, X., Zhang,
+H., Zhang, M., Li, Y ., Wu, Y ., et al. Deepseekmath: Push-
+ing the limits of mathematical reasoning in open language
+models. arXiv preprint arXiv:2402.03300, 2024. 4
+Shi, H., Ye, S., Fang, X., Jin, C., Isik, L., Kuo, Y .-L.,
+and Shu, T. Muma-tom: Multi-modal multi-agent the-
+ory of mind. In Proceedings of the AAAI Conference
+on Artificial Intelligence (AAAI), volume 39, pp. 1510–
+1519, 2025. 2, 3, 5
+Shvo, M., Hari, R., O’Reilly, Z., Abolore, S., Wang,
+S.-Y . N., and McIlraith, S. A. Proactive robotic
+assistance via theory of mind. In Proceedings of
+the IEEE/RSJ International Conference on Intelligent
+Robots and Systems (IROS), pp. 9148–9155. IEEE, 2022.
+3
+Suhr, A., Yan, C., Schluger, J., Yu, S., Khader, H.,
+Mouallem, M., Zhang, I., and Artzi, Y . Execut-
+ing instructions in situated collaborative interactions.
+In Proceedings of the 2019 Conference on Empirical
+Methods in Natural Language Processing and the 9th
+International Joint Conference on Natural Language
+Processing (EMNLP-IJCNLP), pp. 2119–2130, 2019. 3
+Ullman, T. Large language models fail on trivial al-
+terations to theory-of-mind tasks. arXiv preprint
+arXiv:2302.08399, 2023. 1
+Ullman, T., Baker, C., Macindoe, O., Evans, O., Good-
+man, N., and Tenenbaum, J. Help or hinder: Bayesian
+models of social goal inference. In Advances in Neural
+Information Processing Systems (NeurIPS), volume 22,
+2009. 2
+Wang, Q., Saha, K., Gregori, E., Joyner, D., and Goel, A.
+Towards mutual theory of mind in human-ai interaction:
+How language reflects what students perceive about a
+virtual teaching assistant. In Proceedings of the CHI
+Conference on Human Factors in Computing Systems,
+pp. 1–14, 2021. 3
+Wilf, A., Lee, S., Liang, P. P., and Morency, L.-P. Think
+twice: Perspective-taking improves large language mod-
+els’ theory-of-mind capabilities. In Proceedings of the
+Annual Meeting of the Association for Computational
+Linguistics (ACL), pp. 8292–8308, 2024. 1
+Wimmer, H. and Perner, J. Beliefs about beliefs: Repre-
+sentation and constraining function of wrong beliefs in
+young children’s understanding of deception. Cognition,
+13(1):103–128, 1983. 1
+Wu, Y ., He, Y ., Jia, Y ., Mihalcea, R., Chen, Y ., and
+Deng, N. Hi-tom: A benchmark for evaluating higher-
+order theory of mind reasoning in large language mod-
+12
+
+===== PAGE 13 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+els. In Findings of the Association for Computational
+Linguistics: EMNLP 2023, pp. 10691–10706, 2023. 3
+Xu, H., Zhao, R., Zhu, L., Du, J., and He, Y . Opentom:
+A comprehensive benchmark for evaluating theory-of-
+mind reasoning capabilities of large language models. In
+Proceedings of the Annual Meeting of the Association
+for Computational Linguistics (ACL), pp. 8593–8623,
+2024. 3
+Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., Zheng, B.,
+Yu, B., Gao, C., Huang, C., Lv, C., et al. Qwen3 technical
+report. arXiv preprint arXiv:2505.09388, 2025. 6
+Ying, L., Collins, K. M., Wei, M., Zhang, C. E., Zhi-Xuan,
+T., Weller, A., Tenenbaum, J. B., and Wong, L. The
+neuro-symbolic inverse planning engine (NIPE): Model-
+ing probabilistic social inferences from linguistic inputs.
+In First Workshop on Theory of Mind in Communicating
+Agents, 2023. 2
+Ying, L., Jha, K., Aarya, S., Tenenbaum, J. B., Torralba,
+A., and Shu, T. Goma: Proactive embodied cooperative
+communication via goal-oriented mental alignment. In
+2024 IEEE/RSJ International Conference on Intelligent
+Robots and Systems (IROS), pp. 7099–7106. IEEE, 2024.
+3
+Yu, M., Wang, Q., Zhang, S., Sang, Y ., Pu, K., Wei,
+Z., Wang, H., Xu, L., Li, J., Yu, Y ., et al. Few-shot
+character understanding in movies as an assessment to
+meta-learning of theory-of-mind. In Proceedings of the
+International Conference on Machine Learning (ICML),
+pp. 57703–57729. PMLR, 2024. 2
+Zhang, Y ., Robertson, P., Shu, T., Hong, S., and Williams,
+B. C. Risk-bounded online team interventions via the-
+ory of mind. In 2024 IEEE International Conference
+on Robotics and Automation (ICRA), pp. 12964–12970.
+IEEE, 2024. 3
+Zhang, Z., Jin, C., Jia, M. Y ., Zhang, S., and Shu, T.
+Autotom: Scaling model-based mental inference via
+automated agent modeling. In Advances in Neural
+Information Processing Systems (NeurIPS), 2025. 2, 6,
+14, 18, 21
+Zhi-Xuan, T., Mann, J., Silver, T., Tenenbaum, J., and Mans-
+inghka, V . Online bayesian goal inference for bound-
+edly rational planning agents. In Advances in Neural
+Information Processing Systems (NeurIPS), volume 33,
+pp. 19238–19250, 2020. 3
+Zhi-Xuan, T., Ying, L., Mansinghka, V ., and Tenenbaum,
+J. B. Pragmatic instruction following and goal assistance
+via cooperative language-guided inverse planning. arXiv
+preprint arXiv:2402.17930, 2024. 3
+Zhou, C., Wang, Q., Yu, M., Yue, X., Lu, R., Li, J., Zhou, Y .,
+Zhang, S., Zhou, J., and Lam, W. The essence of contex-
+tual understanding in theory of mind: A study on question
+answering with story characters. In Proceedings of the
+Annual Meeting of the Association for Computational
+Linguistics (ACL), pp. 22612–22631, 2025a. 2
+Zhou, X., Chen, V ., Wang, Z. Z., Neubig, G., Sap, M., and
+Wang, X. Tom-swe: User mental modeling for software
+engineering agents. arXiv preprint arXiv:2510.21903,
+2025b. 3
+13
+
+===== PAGE 14 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+A.MindZeroImplementation Details
+A.1. Model Training
+AllMindZeromodels are trained with standard GRPO in the VeRL framework using 4 ×H100 GPUs. For Household
+domain, we additionally serve a reward model Qwen3-235B-A22B-FP8 model with vLLM using 4×H100 GPUs. We use 32
+rollout samples per prompt as the hypothesis proposal set, a rollout batch size of 32, a global batch size of 8, and train for
+20 epochs with AdamW in bf16. The main optimization hyperparameters are a learning rate of 1×10 −6, weight decay
+of 1×10 −2, a max grad norm of 1.0, and a KL coefficient of 1×10 −2. Detailed configurations are open-sourced at
+https://github.com/SCAI-JHU/MindZero/tree/main/configs.
+A.2. Evaluation Metrics
+Speedup in Proactive Assistance.We measure collaborative efficiency using thespeedupmetric:
+speedup= Thuman
+Tcollab
+−1(5)
+where Thuman denotes the time required when the helper remains stationary, and Tcollab denotes the time taken with active
+assistance.
+Inference Cost.We report the inference cost in terms of floating point operations (FLOPs) using the approximation
+FLOPs= 2×P active ×N tokens
+FLOPs
+Trillion = 2× PactiveBillion ×N tokens × 11000 , (6)where Pactive denotes the active parameter count and Ntokens represents the total number of processed tokens (Kaplan et al.,
+2020).
+A.3. Prompt Examples
+We use the same instruction but different context inputs for every task. Examples are shown in Figure 6-9 for task context.
+For reward evaluation in Household domain, we adopt similar prompts in AutoToM (Zhang et al., 2025).
+All prompts are open-sourced at https://github.com/SCAI-JHU/MindZero/tree/main/prompts, and datasets are open-
+sourced athttps://huggingface.co/datasets/SCAI-JHU/MindZero.
+B. GridWorld Experiments
+We provide the experimental details of our GridWorld Question Answering (Section 5.1) and Proactive Assistance (Sec-
+tion 5.2) experiments.
+B.1. Environment Setup
+We randomly generate episodes in a 10×10 grid world containing U(0,20) obstacles and 8 uniquely colored and shaped
+objects. To ensure task complexity, generated episodes are filtered to guarantee sufficient trajectory length and goal ambiguity.
+The resulting dataset comprises both rendered visual observations and detailed textual descriptions of the environment rules.
+All environments and agents accept explicit seeds. We store environment configurations, initial states, and full action
+histories to reproduce any episode or visualization.
+B.2. Data Generation
+Question AnsweringWe formulate the QA task using binary-choice questions with grounded natural language descriptions.
+For each episode, we generate three distinct types of queries to test different aspects of social reasoning:
+• Type 1 & 2 (Pre-Pick):Sampled at timesteps before the human picks up an object. These questions query the model’s
+ability to infer the intended object to be picked (given the placement goal) or the overall goal configuration.
+• Type 3 (Post-Pick):Sampled at timesteps after the human is holding an object. These questions query the intended
+14
+
+===== PAGE 15 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+// context
+<image>You are a helper agent in a GridWorld environment. You are the red robot, and the Human is the green robot. There are
+multiple objects: brown square, pink square, red square, blue square, green square, yellow square, orange square, and purple
+square. The Human's goal is to place two of the objects next to each other. The Human can move up, down, left, right, or stay,
+and can pick up an object when standing on it and not holding one, and can put down an object when holding one and the cell is
+empty. The Human's action trajectory so far is shown in the image. Given that the Human intends to place an object next to the
+yellow square, which object is the Human more likely to pick up next? (a) orange square. (b) green square.
+// instruction
+Please respond with only a single lower case letter a or b.
+Figure 6.A prompt example for GridWorld Question Answering.
+placement target given the currently held object.
+We utilize 800 episodes (2,400 questions) for training and 100 episodes (300 questions) for evaluation.
+Proactive AssistanceFor proactive assistance, the model is required to propose a full probability distribution over the N
+candidate goal pairs at each timestep, enabling real-time intent inference without explicit questioning. We use N= 2 in the
+experiments. To enhance visual grounding and standardize the goal representations, we impose a strict structural constraint
+on our model’s output. Specifically, the model is instructed that the human agent consistently prioritizes interacting with the
+nearest object first. Consequently, within each predicted goal hypothesis, the objects must be strictly ordered based on their
+initial proximity to the human’s starting position (i.e., the closer object is explicitly designated as the first object, and the
+further one as the second). This structured output formulation provides a stronger spatial inductive bias compared to the
+unconstrained inference prompts used for the pretrained baselines.
+We employ 1000 unlabeled episodes, unrolled into individual timesteps, for training the stepwise inference model. Evaluation
+is performed on a separate set of 20 randomly sampled episodes to assess online assistance performance.
+B.3. Agent Policies
+Helping PlannerThe helper assists the human by maintaining a goal distribution B={(g i, pi)} over paired goals. It
+selects actions using a Boltzmann policy based on the probability-weighted expected return: Q(a) =Pi pi ·V(a|g i). The
+policy is designed to be complementary: it predicts which target the human will prioritize (typically the closer one) and
+aims for the other. To ensure smooth collaboration, the helper follows heuristic rules to yield to the human, avoid blocking
+paths, and prevent deadlocks.
+Simulated Human PlannerThe human agent employs a goal-directed planner based on shortest-path distances, operating
+sequentially by acquiring the proximal target and transporting it to a position adjacent to the distal target. Actions are sampled
+via a Boltzmann policy with temperature τ= 0.01, subject to logical constraints (e.g., mandatory object interactions). To
+simulate physical load constraints in the proactive assistance task, the human adheres to an alternating “move-then-pause”
+pattern when carrying an object. Furthermore, to mimic realistic human stochasticity and enhance trajectory diversity, we
+introduce a randomness factor of 0.15 during evaluation, where the agent takes a random action with 15% probability. To
+15
+
+===== PAGE 16 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+// context
+<image>You are a helper agent in a GridWorld environment. You are the red robot, and the Human is the green robot. There are
+multiple objects: pink square, blue square, purple square, yellow square, brown square, green square, orange square, and red
+square. The Human's goal is to place two of the objects next to each other. The Human can move up, down, left, right, or stay,
+and can pick up an object when standing on it and not holding one, and can put down an object when holding one and the cell is
+empty. The Human's action trajectory so far is shown in the image. Please propose a probability distribution that includes 2
+candidate paired goals and their probabilities. Your response should include the probability distribution formatted according to
+this JSON schema: {"$defs": {"GoalParticle": {"properties": {"object1": {"$ref": "#/$defs/Object"}, "object2": {"$ref": "#/$defs/
+Object"}, "p": {"description": "Probability of the goal proposal", "maximum": 1, "minimum": 0, "title": "P", "type": "number"}},
+"required": ["object1", "object2", "p"], "title": "GoalParticle", "type": "object"}, "Object": {"properties": {"color": {"title":
+"Color", "type": "string"}, "shape": {"title": "Shape", "type": "string"}}, "required": ["color", "shape"], "title": "Object", "
+type": "object"}}, "properties": {"particles": {"items": {"$ref": "#/$defs/GoalParticle"}, "title": "Particles", "type": "array
+"}}, "required": ["particles"], "title": "GoalParticles", "type": "object"}.
+// instruction
+Note that the Human (green robot) consistently prioritizes picking up the object closest to its initial starting position first,
+subsequently placing it next to the object that was initially further away. In your JSON response, ensure that for every
+GoalParticle, object1 is strictly the object closer to the Human (green robot)'s starting position, and object2 is the object
+further from it.
+Please output the minified JSON.
+Figure 7.A prompt example for GridWorld Proactive Assistance.
+// context
+What's inside the apartment: There is a kitchen and a bathroom and a bedroom and a living room.
+four kitchen cabinets and a stove and a refrigerator and a microwave and a kitchen table are in the kitchen. a condiment bottle
+is on the fourth kitchen cabinet. a dish bowl and two wine glasses and an apple are on the first kitchen cabinet. a dish bowl and
+a bottle of wine and a condiment bottle and a wine glass are on the third kitchen cabinet. There is nothing inside the stove. a
+plate and a cupcake and a bottle of wine and a dish bowl are inside the refrigerator. a salmon is inside the microwave.
+a bathroom cabinet is in the bathroom. There is nothing inside the bathroom cabinet.
+a coffee table and a desk are in the bedroom.
+a coffee table and a cabinet and a desk and a sofa are in the living room. a water glass and a book are on the coffee table. two
+cupcakes and two dish bowls and a remote control and a wine glass are inside the cabinet.
+Actions taken by Mary: Mary is inside the bedroom. Mary walks towards the kitchen.
+Question: If Mary has been trying to get a dish bowl, which one of the following statements is more likely to be true? (a) Mary
+thinks that the dish bowl is inside the kitchen. (b) Mary thinks that the dish bowl is not inside the kitchen. Please respond
+with either a or b.
+// instruction
+You FIRST think about the reasoning process as an internal monologue and then provide the final answer. The reasoning process
+MUST BE enclosed within <thinking> </thinking> tags. The final answer MUST BE put in \boxed{}.
+Figure 8.A prompt example for Household Question Answering.
+account for the stochasticity of our helping planner and simulated human planner, we evaluate the GridWorld proactive
+assistance task across three random seeds (10, 20, and 30) and report the averaged results.
+16
+
+===== PAGE 17 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+// context
+Human has been working on a task of moving some objects to a target location. The task type can only be one of the following:
+setting up a table, putting something in the dishwasher, putting something in the fridge, preparing food, or watching TV.
+Your are a helpful assistant. In order to help human, please propose multiple hypotheses of [human's overall goal] (including
+both finished and potential future subgoals), base on the following information:
+[current state]
+The apartment has 4 rooms: bathroom, bedroom, kitchen, livingroom.
+The bathroom has 1 bathroomcabinet.
+The bedroom has 1 coffeetable.
+- The coffeetable supports 1 wineglass, 1 plate.
+The kitchen has 1 fridge, 4 kitchencabinet, 1 kitchentable, 1 microwave, 1 stove.
+- The fridge contains 1 plate, 2 cupcake, 1 salmon, 1 pudding.
+- The kitchencabinet contains 1 apple, 3 cutleryfork.
+- The kitchencabinet contains 1 wineglass, 1 cutleryfork.
+- The kitchencabinet contains 1 wineglass, 1 cutleryfork.
+- The kitchencabinet contains 2 condimentbottle.
+- The microwave contains 1 condimentbottle, 1 salmon.
+- The stove contains 1 salmon, 1 cupcake.
+The livingroom has 1 cabinet, 1 coffeetable.
+- The cabinet contains 1 remotecontrol, 1 cupcake, 1 wineglass.
+- The coffeetable supports 1 plate, 1 remotecontrol.
+Human is in the kitchen.
+Human is close to 4 wallpictureframe, 1 salmon, 2 condimentbottle, 1 microwave, 1 wallphone, 6 bellpepper, 3 kitchencounterdrawer
+, 1 dishbowl, 1 clock, 1 lightswitch, 1 pudding, 1 cutleryknife, 1 plate, 1 fridge, 1 powersocket, 1 book, 1 bench, 1 sink, 1
+kitchencounter, 1 kitchencabinet, 1 rug.
+Human is holding nothing.
+[key action history]
+Human has not taken any key action yet.
+[human's next action]
+Human walks towards the kitchencabinet
+Hints:
+- The task type is constant and the target location is unique, i.e., human will be consistently doing the same task (setting up a
+table, putting something in the dishwasher, putting something in the fridge, preparing food, or watching TV) and put all objects
+to the same location.
+- Please propose diverse goals in both object type and count.
+Output Requirements:
+Please provide a probability distribution over n=10 hypotheses of [human's overall goal] (including both finished and potential
+future subgoals).
+Your response should include the probability distribution formatted according to this JSON schema: {'$defs': {'GoalParticle': {'
+properties': {'task_name': {'enum': ['prepare_food','put_dishwasher','put_fridge','setup_table','watch_tv'],'title':'Task
+Name','type':'string'},'objects': {'items': {'$ref':'#/$defs/Object'},'minItems': 1,'title':'Objects','type':'array'},'
+target': {'$ref':'#/$defs/Target'},'p': {'description':'Probability of the goal proposal','maximum': 1,'minimum': 0,'title
+':'P','type':'number'}},'required': ['task_name','objects','target','p'],'title':'GoalParticle','type':'object'},'
+Object': {'properties': {'type': {'enum': ['apple','chips','condimentbottle','cupcake','cutleryfork','plate','pudding','
+remotecontrol','salmon','waterglass','wineglass'],'title':'Type','type':'string'},'count': {'minimum': 1,'title':'Count
+','type':'integer'}},'required': ['type','count'],'title':'Object','type':'object'},'Target': {'properties': {'type': {'
+enum': ['coffeetable','dishwasher','fridge','kitchentable','stove'],'title':'Type','type':'string'}},'required': ['type
+'],'title':'Target','type':'object'}},'properties': {'particles': {'items': {'$ref':'#/$defs/GoalParticle'},'title':'
+Particles','type':'array'}},'required': ['particles'],'title':'GoalParticles','type':'object'}
+// instruction
+Please output the minified JSON.
+Figure 9.A prompt example for Household Proactive Assistance.
+17
+
+===== PAGE 18 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+C. Household Experiments
+We provide the experimental details of our Household Question Answering (Section 5.3) and Proactive Assistance (Sec-
+tion 5.4) experiments.
+C.1. Environment Setup
+We use VirualHome (Puig et al., 2021) v2.2.4 as household simulator, where agent policies are implemented by a goal-
+conditioned MCTS planner. For online goal inference, following AutoToM (Zhang et al., 2025), we use Sequential Monte
+Carlo algorithm to maintain the goal hypotheses over time.
+C.2. Data Generation
+Question AnsweringWe use the MMToM-QA (Jin et al., 2024) training set to construct training data forMindZero.
+Since the test questions use binary choices, valid hypotheses may often lie outside the provided candidate set. To better
+match this format, we apply hypothesis filtering to construct binary options instead of sampling from the full hypothesis
+space. For goal-related questions, we form choices by pairing a randomly sampled observed object with an unobserved one.
+For belief-related questions, we sample an unobserved object–container pair to create a binary verification task. Applying
+this filtering strategy to the 953 training episodes yields a final dataset of 4,866 examples.
+Proactive AssistanceFollowing the standard setting of VirualHome (Puig et al., 2021), we use Apartment #0, #1, #2, #3,
+and #5 for training data generation, and Apartment #3 and #6 for testing data generation. We generate 20 episodes (968
+timesteps) for training and 16 for testing, evenly distributed across four task types: setting up a table, loading the fridge,
+preparing food, and loading the dishwasher.
+D. Human Experiment
+We recruited 12 Johns Hopkins University students, including undergraduate, master’s, and Ph.D. students. The pool
+included 5 male and 7 female participants. All participants were at least 18 years old and able to operate a computer interface.
+The study was approved by the Institutional Review Board (IRB). Prior to participation, each participant reviewed and
+signed an informed consent form. Participation was voluntary, and participants could withdraw from the study at any time.
+Each study session took approximately 60 minutes. Participants completed household tasks in a simulated apartment
+environment using a computer interface, as shown in Figure 10. During the task, the system recorded task-related interaction
+logs.
+While Section 6.4 reports speedup averaged across tasks, we present per-task results in Table 3. Across all four tasks,
+MindZero trained from Qwen3-4B yields a positive speedup, whereas the pretrained Qwen3-4B model produces a negative
+speedup on Tasks 5 and 13, indicating that the same backbone without our training may even slow the human down. The
+per-task gap betweenMindZeroand Gemini-3-Flash is small and varies in sign, consistent with the absence of a statistically
+significant difference between the two on aggregate speedup.
+Table 3.Human experiment results in the Household Proactive Assistance domain. We report average task-completion steps for each
+condition and the corresponding speedup over the Single Human setting. We useMindZerow/ Qwen3-4B as the base model.
+Task ID Average Steps Speedup (%)
+Qwen3-4BMindZeroGemini-3-Flash Single Human Qwen3-4BMindZeroGemini-3-Flash
+3 56 51 50 70 23.67 37.50 38.41
+5 58 44 39 47 -18.50 7.63 21.55
+8 43 41 44 47 9.23 15.45 7.58
+13 119 97 91 114 -3.92 18.28 26.10
+Average – – – – 2.62 19.70 23.40
+Standard Error – – – – 9.00 6.30 6.40
+18
+
+===== PAGE 19 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+Figure 10.Human experiment interface for the Household Proactive Assistance domain. The header reports the task, step budget, and
+episode; the left panel lets the participant navigate rooms and shows holding status, goal progress, and the helper agent’s state. The center
+renders the agent’s view of the current room with an inset household map, and the right panel lists all visible objects with their spatial
+relations and open/closed states alongside the contextual action for the selected object.
+19
+
+===== PAGE 20 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+E. Test-Time Scaling Methods
+E.1.ThoughtTracing
+For the Household Question Answering task, we evaluateThoughtTracingusing the original implementation, without any
+modifications to the codebase, including the prompts. In contrast to the evaluation protocol reported in the original work, we
+conduct our testing on the complete, unmodified set of 600 test instances to ensure a fair comparison with other baselines
+and our main experiments. For the GridWorld Question Answering task, which was not explored in the original work,
+we introduce only the necessary environment-specific modifications. AsThoughtTracingdoes not support direct visual
+input, we augment each question with explicit coordinate representations alongside an ASCII map of the environment. This
+adaptation ensures that all essential visual information required for reasoning is preserved.
+E.2.AutoT oM
+We evaluateAutoToMacross multiple backend models using the original implementation, without any modifications to the
+codebase, including the prompts. Due to the limited instruction-following capabilities of smaller models (e.g., Llama-3.2-
+3B), parsing errors may occur. When such errors arise, we adopt a uniform distribution as the inference result ofAutoToMto
+ensure a fair comparison.
+E.3. Textual Transcripts
+Specifically, for GridWorld Question Answering, as bothThoughtTracingandAutoToMdo not support multimodal inputs,
+we use textual transcripts to evaluate the performance. See an example in Figure 11.
+You are a helper agent in a GridWorld environment. You are the red robot, and the Human is the green robot. There are multiple
+objects: brown star, orange star, yellow star, pink star, green star, red star, purple star, and blue star. The Human's goal is
+to place two of the objects next to each other. The Human can move up, down, left, right, or stay, and can pick up an object when
+standing on it and not holding one, and can put down an object when holding one and the cell is empty. The Human's action
+trajectory so far is shown in the image.
+State and trajectory details:
+Agents:
+- Human pos: (6, 1)
+- Helper pos: (0, 0)
+Obstacles:
+[]
+Objects (by label):
+{'brown star': (5, 9),'orange star': (8, 2),'yellow star': (4, 0),'pink star': (9, 1),'green star': (5, 5),'red star': (3,
+3),'purple star': (3, 7),'blue star': (2, 8)}
+Action deltas (dx, dy):
+{'up': (0, 1),'down': (0, -1),'left': (-1, 0),'right': (1, 0),'stay': (0, 0),'pick': (0, 0),'put': (0, 0)}
+Action trajectory (human, name + delta):
+t=1: left (-1, 0); t=2: down (0, -1); t=3: down (0, -1); t=4: left (-1, 0)
+Action trajectory (human positions):
+t=1: (7, 3); t=2: (7, 2); t=3: (7, 1); t=4: (6, 1)
+ASCII state:
+Step 4
+. . . . . 0 . . . .
+. . 7 . . . . . . .
+. . . 6 . . . . . .
+. . . . . . . . . .
+. . . . . 4 . . . .
+. . . . . . . . . .
+. . . 5 . . . . . .
+. . . . . . . . 1 .
+. . . . . . H . . 3
+P . . . 2 . . . . .
+Given that the Human intends to place an object next to the purple star at (3, 7), which object is the Human more likely to pick
+up next? (a) yellow star at (4, 0). (b) red star at (3, 3).
+Figure 11.An example of textual transcript for GridWorld Question Answering.
+20
+
+===== PAGE 21 =====
+MindZero: Learning Online Mental Reasoning With Zero Annotations
+F . Full Results of Question Answering
+While Figure 4 provides an overview of the results forMindZeroand the baselines, we present the full results for our
+question answering experiments across two domains in Table 4 below.
+Table 4.Full question answering results ofMindZeroand baselines on (a) GridWorld and (b) Household domains. Best results overall and
+among open-weight models are shown inboldand underlined. * indicates methods with text-only inputs.
+(a)Gridworld Question Answering
+Method Accuracy↑TFLOPs↓
+Qwen3-VL-4B 37.7 3.6
+Qwen3-VL-4B-Think 42.7 67.1
+Qwen3-VL-8B 43.3 7.2
+Qwen3-VL-8B-Think 44.7 110.9
+Qwen3-VL-235B-A22B 39.3 21.9
+Qwen3-VL-235B-A22B-Think 44.3 1767.5
+GPT-5.2 50.7 Proprietary
+GPT-5.2-Think 50.7 Proprietary
+Gemini-3-Flash 68.0 Proprietary
+Gemini-3-Pro 83.7 Proprietary
+ThoughtTracing* (Kim et al., 2025)
+w/ Qwen3-VL-4B 50.3 31.0
+w/ Qwen3-VL-8B 56.7 54.3
+w/ Qwen3-VL-235B-A22B 53.0 169.8
+w/ GPT-5.2 57.3 Proprietary
+w/ Gemini-3-Flash 64.0 Proprietary
+AutoToM* (Zhang et al., 2025)
+w/ Qwen3-VL-4B 49.3 344.4
+w/ Qwen3-VL-8B 52.3 741.2
+w/ Qwen3-VL-235B-A22B 44.7 1089.7
+w/ GPT-5.2 57.3 Proprietary
+w/ Gemini-3-Flash 47.0 Proprietary
+MindZero(Ours)
+w/ Qwen3-VL-4B 95.0 3.6
+w/ Qwen3-VL-8B 92.3 7.2
+(b)Household Question Answering
+Method Accuracy↑TFLOPs↓
+Llama-3.1-8B 41.3 12.9
+Llama-3.2-3B 34.8 4.0
+Qwen3-4B 42.8 10.9
+Qwen3-4B-Think 45.0 41.3
+Qwen3-235B-A22B 54.5 80.4
+Qwen3-235B-A22B-Think 54.0 2663.0
+GPT-5.2 65.0 Proprietary
+GPT-5.2-Think 73.5 Proprietary
+Gemini-3-Flash 67.2 Proprietary
+Gemini-3-Pro 60.8 Proprietary
+ThoughtTracing (Kim et al., 2025)
+w/ Llama-3.1-8B 44.3 571.7
+w/ Llama-3.2-3B 43.5 232.9
+w/ Qwen3-4B 54.5 291.2
+w/ Qwen3-235B-A22B 59.8 2097.9
+w/ GPT-5.2 68.0 Proprietary
+w/ Gemini-3-Flash 72.3 Proprietary
+AutoToM (Zhang et al., 2025)
+w/ Llama-3.1-8B 54.0 136.3
+w/ Llama-3.2-3B 51.0 23.4
+w/ Qwen3-4B 54.7 177.5
+w/ Qwen3-235B-A22B 67.5 389.9
+w/ GPT-5.2 76.5 Proprietary
+w/ Gemini-3-Flash80.2Proprietary
+MindZero(Ours)
+w/ Llama-3.1-8B 76.2 12.9
+w/ Llama-3.2-3B 77.8 4.4
+w/ Qwen3-4B 72.7 13.1
+21

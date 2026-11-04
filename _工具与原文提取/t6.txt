@@ -1,0 +1,1574 @@
+
+
+===== PAGE 1 =====
+Findings of the Association for Computational Linguistics: EMNLP 2026, pages 12763–12778
+October 24-29, 2026 ©2026 Association for Computational Linguistics
+Mind the Gap: Theory-of-Mind-Grounded Friction for Epistemic
+Alignment
+Yifan Zhu and Kyeongmin Rim and James Pustejovsky
+Brandeis University, Waltham, MA, USA
+{zhuyifan, krim, jamesp}@brandeis.edu
+Abstract
+Productive dialogue alignment requires distin-
+guishing surface coordination (acknowledg-
+ments and smooth task progression) from epis-
+temic alignment (convergence of belief states);
+standard preference-based methods typically
+optimize response-level preferences without ex-
+plicitly modeling the latter. We operationalize
+Theory-of-Mind (ToM) inference as a control
+signal within Frictive Policy Optimization by
+extracting, at each referring expression, a four-
+part belief structure: the speaker’s intended ref-
+erent, the addressee’s interpretation, and each
+participant’s model of the other’s belief. This
+makes friction mechanically computable from
+epistemic-state comparisons, capturing silent
+divergence, where both participants proceed
+confidently while grounding to different refer-
+ents. We evaluate the signal at two levels. At
+the representation level, ablating the second-
+order channel reduces misunderstanding recall
+from 65% to 26%. At the policy level, reward-
+shaping (FAR) and trust-region (FTR) variants
+improve intervention F1 and warranted-context
+calibration over DPO, with Brier scores in-
+dependently supporting the calibration gains.
+Across three training runs, FAR and FTR re-
+main substantially more stable, whereas DPO
+varies widely and can degrade intervention
+competence already present in the base policy.
+Thus, ToM-grounded friction provides a train-
+able signal for context-sensitive intervention
+under referential belief divergence.
+1 Introduction
+Recent work on epistemically asymmetric interac-
+tion has begun to expose a structural gap in how col-
+laborative dialogue is modeled. In settings such as
+the Distributed Partial Information Puzzle (DPIP;
+Zhu et al., 2026a), each participant observes only
+a partial view of the environment, requiring infer-
+ence not only about what others know, but also
+about what they can perceive and misinfer. Such
+interactions reveal a problem that standard turn-
+level evaluation obscures: interlocutors may appear
+aligned through acknowledgments, uninterrupted
+task progression, or lexical accommodation while
+still grounding expressions in different referents
+or maintaining incompatible interpretations. We
+refer to this gap as the distinction between surface-
+level coordination (observable dialogue behavior)
+and epistemic alignment (convergence of partici-
+pants’ belief states, including beliefs about others’
+beliefs); alignment is therefore better viewed as
+ongoing regulation of epistemic states rather than
+as successful surface coordination.
+Frictive Policy Optimization (FPO; Pustejovsky
+and Krishnaswamy, 2026) addresses this distinc-
+tion by formalizing alignment as risk-sensitive con-
+trol over belief, commitment, and uncertainty rather
+than turn-level optimization against a static prefer-
+ence signal. Existing instantiations, however, pri-
+marily operate on surface-level or indirectly repre-
+sented frictive states, limiting their ability to cap-
+ture latent divergence in genuinely asymmetric in-
+teraction. Such divergence can require an explicit
+account of the higher-order beliefs: participants
+may hold incompatible first-order interpretations
+while each presumes, at the second-order level,
+that the other shares their own. We therefore ex-
+tend FPO with a point-in-time Theory-of-Mind
+(ToM) representation that tracks, for each refer-
+ring expression, the speaker’s intended referent, the
+addressee’s interpretation, and each participant’s
+model of the other’s belief. Friction is then com-
+puted from this epistemic structure rather than in-
+ferred from dialogue acts alone.
+We make three contributions. First, we introduce
+a point-in-time ToM schema for HCRC MapTask
+(Anderson et al., 1991) that reconstructs first- and
+second-order beliefs at each referring expression
+and converts their divergence into a computable
+friction signal. Second, channel attribution shows
+that second-order belief structure materially im-
+12763
+
+===== PAGE 2 =====
+FPO Trainer Variants (§6)
+HCRC MapTask
+dialogue transcript
++ giver/follower map
++ dialogue-act tags
+(per referring expression)
+Li et al. (2026)
+perspectivist annotations
+first-order labels 1 2
+GPT-5 Extraction (§4.1)
+1 – 2 : (Li et al., 2026) first-order labels
+3 – 4 : inferred second-order beliefs + 3 auxiliary fields
+Human Validation
+Blind annotation pilot (n=60)
+κ = 0.80 (speaker ToM)
+κ = 0.77 (addressee ToM)
+Friction Module Φ (§4.2)
+(deterministic, rule-based)
+F − = ∑i wi Ci
+F + = INFOGAIN(h, a)
+DPO
+baseline
+FAR
+reward shaping
+R′ = Rtask + α g(Risk)F − βCfric
+FPP
+preference pairing
+rank by F +(y+) > F+(y−)
+FTR
+trust-region control
+β(h) = 1ϵ0 + κF −(h)
+Trained policy (§7)
+(evaluated on held-out
+MapTask test set)
+provides 1 2
+sample n=60
+audits
+no per-instance F − input
+F − inject
+F + ranking
+F − trust region
+Figure 1: Pipeline overview. GPT-5 augments Li et al. (2026)’s first-order labels with second-order ToM predictions
+and auxiliary fields to construct the four-identifier schema. A blind human-annotation pilot audits the inferred
+second-order labels. The deterministic friction module Φ computes F − and F +, which condition the FAR, FPP,
+and FTR objectives. Standard DPO uses friction-informed preference pairs but receives no per-instance friction
+value; DPO-FB removes friction from pair construction entirely.
+proves recovery of misunderstandings, including
+silent intent fixing . Third, across FAR and FTR,
+per-instance friction conditioning improves inter-
+vention behavior and warranted-context calibration
+over DPO while substantially increasing training
+stability.
+2 Background
+2.1 LLM Alignment
+Mainstream alignment methods—RLHF (Chris-
+tiano et al., 2017), DPO (Rafailov et al., 2023), and
+GRPO (Shao et al., 2024)—optimize policies to-
+ward turn-level preference signals. This paradigm
+is well suited to instruction following but does not
+explicitly represent the evolving epistemic states
+that determine response appropriateness in collab-
+orative interaction. Frictive Policy Optimization
+(FPO; Pustejovsky and Krishnaswamy, 2025, 2026)
+instead formulates alignment as risk-sensitive epis-
+temic control through a friction functional. Its prior
+implementation has derived friction from natural-
+language descriptions of frictive states (Nath et al.,
+2025) and simulated partial-information environ-
+ments (Nath et al., 2026); whereas, how to compute
+it directly from participants’ belief structure in nat-
+uralistic asymmetric dialogue remains open.
+2.2 Grounding, Perspective, and Epistemic
+Alignment
+Common ground is dynamically established
+through grounding (Clark and Brennan, 1991;
+Clark, 1996), yet participants may proceed as if mu-
+tual understanding has been achieved while main-
+taining divergent interpretations (Zhu et al., 2026b).
+Work on automated common ground tracking (Khe-
+bour et al., 2024) shows that surface transcripts
+alone are insufficient even for tracking shared be-
+liefs in collaborative tasks, underscoring the need
+for richer epistemic representations.
+Theory of Mind (ToM) distinguishes first-order
+beliefs from beliefs about others’ beliefs (Premack
+and Woodruff, 1978; Wimmer and Perner, 1983;
+Sperber and Wilson, 1986), making such silent
+divergence representable. Quesque and Rossetti
+(2020) argue that genuine mentalizing requires
+both representing another’s mental state rather than
+relying only on behavioral or textual regularities
+and maintaining that perspective as distinct from
+one’s own. Riemer et al. (2025) distinguish lit-
+eral ToM, predicting another agent’s behavior, from
+functional ToM, adapting one’s own behavior us-
+ing a representation of another’s mental state. Our
+use of ToM follows this functional view: epistemic
+representations are constructed not only to predict
+beliefs, but to condition downstream intervention.
+Recent benchmarks probe these capabilities
+in increasingly interactive settings. FANToM
+(Kim et al., 2023) evaluates belief attribution and
+information asymmetry in multi-party dialogue;
+MMToM-QA (Jin et al., 2024) requires joint rea-
+soning over visual and linguistic evidence; and Ne-
+gotiationToM (Chan et al., 2024) evaluates belief
+and intention inference during strategic negotiation.
+These benchmarks primarily evaluate reasoning
+performance over annotated mental states. Our
+focus is complementary: representing epistemic
+relations explicitly so that their divergence can be
+converted into a downstream control signal.
+12764
+
+===== PAGE 3 =====
+3 Data
+We construct FPO training instances from Li et al.
+(2026), which augments the HCRC MapTask cor-
+pus with perspectivist grounding annotations. In
+MapTask, a giver guides a follower through a navi-
+gation task using mismatched maps. Giver/follower
+roles remain fixed across a dialogue, whereas
+speaker and addressee vary with each referring
+expression (RE), which determines the assignment
+of first- and second-order beliefs (§4.1). The anno-
+tations distinguish three map discrepancies: exis-
+tence (a landmark appears on only one map), lexi-
+cal (the same landmark has different labels), and
+multiplicity (a landmark is duplicated on one map
+only), with multiplicity providing the main source
+of silent misalignment.
+Each RE is aligned with its perspectivist be-
+lief annotations and yields an instance containing
+the dialogue history, giver/follower beliefs, and a
+grounding status (PENDING , MISUNDERSTOOD , or
+ALIGNED ). We treat PENDING and MISUNDER -
+STOOD instances as frictive for friction construc-
+tion, while ALIGNED instances provide non-frictive
+contrasts. The resulting split contains 99 train-
+ing dialogues with 2,705 REs (147 misunderstood)
+and 24 test dialogues with 761 REs (69 misunder-
+stood), preserving misunderstanding rates of 5.5%
+and 9.1%, respectively. After the additional filter-
+ing used for policy adaptation, 663 training and 278
+held-out evaluation instances remain. Details about
+data preprocessing and split are in Appendix C.
+4 Theory-of-Mind-Grounded Friction
+Construction
+We adopt the functional conception of ToM pro-
+posed by Riemer et al. (2025): the value of a
+mental-state representation lies not in predicting
+another agent’s behavior, but in guiding one’s own.
+Accordingly, our friction signal conditions pol-
+icy intervention on an explicitly represented diver-
+gence between an agent’s own belief and its model
+of the interlocutor’s. This design satisfies the two
+requirements identified by Quesque and Rossetti
+(2020): it operates over explicit mental-state repre-
+sentations rather than surface behavioral regulari-
+ties, and it maintains distinct perspectives by com-
+puting friction from the comparison between an
+agent’s belief and its separately represented model
+of the addressee’s belief.
+Figure 1 gives an overview of the full pipeline
+described in this section. GPT-5 (Singh et al., 2026)
+extracts the four-identifier belief structure (§4.1)
+from dialogue and map context, validated against
+a blind human-annotation pilot; the deterministic
+friction module Φ (§4.2) then converts this struc-
+ture into F − and F + signals, which are injected
+into three FPO trainer variants (FAR, FPP, and FTR
+alongside a friction-blind DPO baseline for com-
+parison (§6).
+4.1 Point-in-Time ToM Extraction
+We extend the perspectivist annotation framework
+of Li et al. (2026) in two ways: (1) replacing ret-
+rospective grounding outcomes with point-in-time
+belief attribution, and (2) augmenting first-order
+beliefs with explicit second-order Theory-of-Mind
+(ToM) beliefs. The resulting representation makes
+silent divergence detectable through cross-party be-
+lief comparison.
+We therefore introduce a four-identifier schema
+that attributes, for each referring expression at time
+t: 1⃝ the speaker’s intended referent, 2⃝ the ad-
+dressee’s inferred referent, 3⃝ the speaker’s be-
+lief about the addressee’s interpretation, and 4⃝
+the addressee’s belief about the speaker’s inten-
+tion. The first-order identifiers 1⃝– 2⃝ come from
+the perspectivist annotations of Li et al. (2026);
+the second-order identifiers 3⃝– 4⃝ are inferred by
+GPT-5 from dialogue, map, and dialogue-act con-
+text. The attributed state is indexed to time t, al-
+though the offline extractor may use later repair
+or contradiction evidence to reconstruct that latent
+state. Silent divergence therefore becomes a rela-
+tion among participant-specific beliefs rather than
+a single grounding label.
+Beyond the four identifiers, the schema ex-
+tracts three auxiliary fields through GPT-5 infer-
+ence: UPTAKE _QUALITY , SURFACE _SIGNALS ,
+and IS_EXISTENCE _QUERY .
+UPTAKE _QUALITY is a categorical field in
+the addressee_belief block with four values:
+committed, hesitant, withheld, and absent. It
+captures how confidently the addressee responds
+after an RE, ranging from confident acknowledg-
+ment to explicit non-commitment or no response.
+The friction module maps these categories to the
+uncertainty component of F −, treating withholding
+as the strongest signal of unresolved uncertainty.
+SURFACE _SIGNALS is a multi-label field record-
+ing repair-oriented discourse markers in the ad-
+dressee response, including acknowledge, pause,
+request_clarify, repair, and contradict.
+The friction module uses these signals both to es-
+timate the contradiction component of F − and to
+12765
+
+===== PAGE 4 =====
+Configuration 1⃝- 2⃝ 3⃝- 1⃝ 4⃝- 2⃝ Description
+Aligned = = = Both parties land on the same landmark and correctly believe
+they have.
+Silent intent fixing ̸= = = Divergence exists but neither party detects it; both proceed
+confidently.
+Asymmetric (speaker-aware) ̸= ̸= = Divergence exists; speaker has detected it, addressee has not.
+Asymmetric (addressee-aware) ̸= = ̸= Divergence exists; addressee has detected it, speaker has not.
+Mutual awareness ̸= ̸= ̸= Divergence exists and both parties have detected it; repair is
+imminent or underway.
+Table 1: The five canonical epistemic configurations produced by the four-identifier schema. Columns report
+pairwise agreement among the four identifiers (§4.1): 1⃝- 2⃝ = referent agreement between speaker and addressee
+(first-order); 3⃝- 1⃝ = whether the speaker correctly anticipates the addressee’s interpretation; 4⃝- 2⃝ = whether the
+addressee correctly recovers the speaker’s intent. “=” is agreement, “̸=” is divergence.
+infer whether the addressee is aware of a grounding
+mismatch.
+IS_EXISTENCE _QUERY is a boolean field in the
+speaker_belief block identifying references that
+explicitly ask whether a landmark exists (e.g., “do
+you have a forest?”). These cases are excluded
+from FPO training because discovering asymmetry
+through questioning is treated as successful infor-
+mation exchange rather than grounding failure.
+Pairwise comparisons among the four identi-
+fiers induce five canonical epistemic configurations
+shown in Table 11. Aligned is the only non-frictive
+configuration, while silent intent fixing, as the cen-
+tral friction target, captures cases where interlocu-
+tors anchor to different referents while mutually
+presuming agreement.
+Illustrative example Consider a multiplicity dis-
+crepancy in which the giver’s map contains two in-
+stances of the same landmark while the follower’s
+map contains only one. When the giver refers
+to one of the two instances, the follower may re-
+solve the expression to their single correspond-
+ing landmark. The intended and interpreted ref-
+erents therefore diverge ( 1 ̸= 2 ), while the giver
+assumes the follower recovered the intended refer-
+ent ( 3 = 1 ) and the follower assumes their interpre-
+tation matches the giver’s intention ( 4 = 2 ). This
+yields silent intent fixing: first-order interpretations
+diverge while neither participant represents the mis-
+match.
+1Two pairwise comparisons are not shown, 1 - 4 and 2 -
+3 . These are not independent degrees of freedom: 1 - 4 is
+entailed by the reported columns whenever 4 - 2 =“=”, and
+analogously 2 - 3 is entailed whenever 3 - 1 =“=”; both are
+therefore fixed in the Aligned and Silent-intent-fixing rows
+and partially fixed in the two singly-aware rows, leaving them
+genuinely underdetermined only in the Mutual-awareness con-
+figuration. Thus, they do not enter the friction computation.
+4.2 Friction Computation
+The friction module Φ maps the four-identifier
+schema to FPO’s productive friction signal ( F −)
+and unproductive friction signals (F +):
+F −(h) = wUNC UNC(h) + wCONTR CONTR (h)
++ wHAZ HAZ(h) + wVALCONF VALCONF (h) (1)
+F +(h, a) = INFO GAIN (h, a). (2)
+All F − components are deterministic scalar sur-
+rogates computed from the four-identifier schema
+and auxiliary dialogue-observable fields, normal-
+ized to [0, 1]. UNC captures uncertainty from ad-
+dressee uptake; CONTR captures surfaced contra-
+diction or repair; HAZ estimates the propagation
+risk associated with map asymmetries; and VAL-
+CONF captures second-order belief conflict from
+the four-identifier structure. In particular, refer-
+ential divergence is defined by 1⃝ ̸= 2⃝, while
+speaker and addressee awareness are reflected by
+3⃝ ̸= 1⃝ and 4⃝ ̸= 2⃝, respectively. Thus, F −
+is not simply an agreement/disagreement polar-
+ity score: it combines uncertainty, surfaced repair,
+propagation risk, and higher-order belief conflict.
+Full component mappings appear in Appendix A.1.
+Composition. We use w = (0.15, 0.20, 0.30,
+0.35) for (UNC, CONTR , HAZ, VALCONF ), re-
+spectively, with ∑i wi = 1 . The weights are
+hand-set rather than fit to this dataset. Greater
+mass is assigned to HAZ and VALCONF, which
+target propagation-prone and potentially latent mis-
+alignment, whereas UNC and CONTR primarily
+reflect already-surfaced precursor signals. We do
+not claim these values are optimal: uniform weight-
+ing preserves the relevant friction ordering, and
+±20% perturbations do not change the qualitative
+downstream conclusions (Appendix A.2).
+Productive friction. F +(h, a) represents the
+epistemic utility of an intervention over the four
+12766
+
+===== PAGE 5 =====
+actions clarify, verify, redirect, and refuse,
+inherited from the FPO action space in Pustejovsky
+and Krishnaswamy (2026) rather than proposed
+here as a discourse taxonomy. In our offline im-
+plementation, INFO GAIN (h, a) is a hand-specified
+lookup over epistemic configuration and action: di-
+agnostic actions receive greater utility in divergent
+states, whereas unnecessary intervention receives
+little value in aligned states. The full utility table
+are reported in Appendix A.3.
+5 Friction Signal Validation
+Before using the friction cache for trainer adapta-
+tion (§6), we validate the signal along three axes: (i)
+whether the schema recovers usable belief structure
+and misunderstanding labels, (ii) whether the com-
+posite F − monotonically separates frictive from
+non-frictive contexts, and (iii) whether the signal
+materially depends on the second-order ToM struc-
+ture introduced in §4.1. Results are reported on
+both train and test partitions below.
+5.1 Schema Validation and Belief Accuracy
+The four-identifier schema achieves 98.5% parse
+success on train ( 2665/2705) and 100% on test
+(761/761); the remaining train failures are primar-
+ily API truncations due to long-dialogue and are
+filtered before downstream training. Belief accu-
+racy against Li et al. (2026) is shown in Table 2.
+Addressee-side belief recovery substantially ex-
+ceeds speaker-side recovery (80.6–81.3% vs. 59.8–
+64.1% loose match), which is expected because
+addressee interpretations are more directly observ-
+able through uptake and repair behavior, whereas
+speaker intent must be inferred from production-
+side evidence alone. Since both friction compu-
+tation and trainer adaptation primarily condition
+on addressee-side state, the stronger follower-side
+accuracy is the operationally relevant quantity.
+Second-order ToM consistency is lower (35.9–
+43.5% speaker ToM; 41.4–42.0% addressee ToM),
+but these values are reported as soft signals rather
+than gold-aligned accuracy because no direct an-
+notation for second-order beliefs exists in the cor-
+pus. To directly assess the reliability of GPT-5
+second-order predictions, we conducted a stratified
+blind manual annotation on 60 samples (details
+in Appendix B.2). This independent human an-
+notation then was used as ground-truth that the
+GPT-5 predictions were compared against. Agree-
+ment reached 82% for speaker-ToM and 80% for
+addressee-ToM, corresponding to Cohen’sκ values
+of 0.80 and 0.77, respectively. These results indi-
+Quantity (loose match) Train Test
+Speaker belief 59.8% 64.1%
+Addressee belief 81.3% 80.6%
+Speaker ToM consistency 35.9% 43.5%
+Addressee ToM consistency 41.4% 42.0%
+Table 2: Four-identifier accuracy on train and test parti-
+tions.
+Partition Status n Mean F − Median
+Train Pending 2521 0.185 0.182Misund 145 0.375 0.340
+Test Pending 692 0.193 0.203Misund 69 0.390 0.340
+Table 3: F − distribution by gold status on both parti-
+tions
+cate substantial agreement with human judgments,
+supporting the use of the inferred second-order be-
+liefs as supervisory signals during training.
+At the task level, the schema recovers misunder-
+standing labels with 67.6% recall on train (98/145)
+and 65.2% on test (45/69), improving more than
+60 points over the cascade-based alternatives dis-
+cussed in Appendix B.
+5.2 F − Distribution and Monotonic Ordering
+The composite F − is intended to function as a
+monotonic risk signal: genuinely frictive contexts
+should receive systematically higher values than
+non-frictive ones. This ordering holds consistently
+across both partitions (Table 3). Mean F − in-
+creases from 0.185 to 0.375 on train (∆ = 0.190)
+and from 0.193 to 0.390 on test (∆ = 0.197) when
+moving from pending to misunderstood contexts.
+The cross-partition gap appears minimal, as we ar-
+gue the composite generalizes across the data. This
+monotonicity is required for downstream trainer
+adaptation, where F −(h) directly controls trust-
+region width: a non-monotonic signal would in-
+correctly relax constraints on high-risk contexts or
+tighten them on benign ones.
+5.3 Detection Channels and ToM
+Contribution
+We further decompose detected misunderstandings
+by the channel responsible for recovery: (i) ToM-
+dependent configurations involving silent intent fix-
+ing or asymmetric awareness, (ii) direct first-order
+divergence, and (iii) metadata-based multiplicity
+fallback. Results are summarized in Table 4.
+Second-order structure accounts for a substantial
+share of recovered misunderstandings, including
+all silent-intent-fixing instances identified by our
+12767
+
+===== PAGE 6 =====
+Detection channel Train (%) Test (%)
+ToM-required configurations 44.2 39.1
+First-order divergence 1.4 –
+Multiplicity fallback 22.1 26.1
+Total recall 67.6 65.2
+Table 4: Channel decomposition of detected misunder-
+standings.
+framework. Removing the ToM-dependent chan-
+nel reduces recall from 67.6% to 23.4% on train
+and from 65.2% to 26.1% on test, while remov-
+ing the multiplicity fallback as well reduces recall
+to 1.4% and 0%, respectively. The channels are
+therefore non-redundant, and the sharp drop under
+ToM ablation shows that the friction signal depends
+materially on the second-order belief structure in-
+troduced in §4.1. Most remaining misses involve
+underspecified or visually ambiguous references
+that the upstream extractor cannot disambiguate
+from dialogue and map evidence alone.
+6 FPO Trainer Adaptation
+We adapt a friction-blind DPO baseline (Rafailov
+et al., 2023) and three FPO variants (FAR, FPP, and
+FTR) from Pustejovsky and Krishnaswamy (2026)
+to offline MapTask data. We use the participant-
+agent setting: the policy observes only its own
+map-derived information and dialogue history and
+decides whether to answer or intervene. Full cross-
+party ToM annotations are used offline to construct
+friction supervision but are never direct policy in-
+puts. During both training and standard inference,
+the policy receives dialogue history plus the same
+compact agent-observable epistemic projection.
+Training instances and observable belief input.
+Each instance pairs a referring expression with its
+immediate addressee response. The policy input
+consists of the dialogue history and an observable
+belief-state preamble: a compact projection of the
+schema-derived epistemic state containing only in-
+formation available to the participant-agent. Full
+cross-party ToM annotations and the other partici-
+pant’s private map are used only offline to construct
+friction supervision and are never direct policy in-
+puts. The same observable input is used during
+training and standard inference. After filtering un-
+derspecified and existence-query cases, the pol-
+icy dataset contains 663 training instances (216
+divergent, 447 aligned) and 278 held-out test in-
+stances. For pair-based methods, completions are
+retrieved from the corpus: repair is preferred over
+acknowledgment in divergent contexts, whereas
+unnecessary intervention is dispreferred in aligned
+contexts.
+DPO. Standard DPO uses β = 0.1 with a frozen
+reference policy and receives no friction signal.
+FAR (Friction-Aware Reward). FAR incorpo-
+rates friction through reward shaping,
+R′ = Rtask + α g(Risk)F (h, y) − β Cfric(a),
+so intervention is encouraged when epistemic risk
+is high and penalized when it imposes unnecessary
+cost. We instantiate Risk from the friction-derived
+epistemic state; offline adaptation details are given
+in Appendix D.1.
+FPP (Friction Preference Pairing). FPP applies
+a DPO-style preference objective in whichy+ must
+have greater productive friction F + than y−. This
+converts the friction signal into pairwise prefer-
+ence supervision while retaining the same underly-
+ing policy backbone. The offline pair-construction
+and weighting adjustments are described in Ap-
+pendix D.2.
+FTR (Friction-Conditioned Trust Region).
+FTR uses epistemic risk to control how far the pol-
+icy may depart from the base model: high-friction
+contexts permit larger updates, while low-friction
+contexts remain more strongly anchored. We im-
+plement
+LFTR(h) = LCE(ygold|h) + β(h) ˆKL(πθ∥π0|h)
+β(h) = 1ϵ0 + κF −(h) .
+Estimator and tuning details appear in Ap-
+pendix D.3.
+7 Evaluation
+We evaluate three questions: whether per-instance
+ToM-grounded friction improves policy adaptation
+over static preference training; whether the gains
+come from friction-aware supervision or direct ob-
+jective conditioning; and whether they persist under
+prompting baselines and removal of inference-time
+belief information. All experiments use the held-
+out MapTask test set (n=278), with 120 contexts
+where intervention is warranted and 158 aligned
+contexts.
+Our primary measures are intervention F1 and
+calibration on warranted contexts. ClarifyScore/F1
+rewards intervention under epistemic divergence
+12768
+
+===== PAGE 7 =====
+while penalizing unnecessary intervention on
+aligned instances. Calibration is evaluated with
+both ECE (expected binned gap between first-token
+confidence and intervention correctness), and the
+Brier score, a strictly proper scoring rule. We report
+Brier score as an independent check that calibration
+conclusions do not depend on ECE alone. InfoEff,
+expected epistemic gain per unit intervention cost,
+and pairwise LLM preference provide secondary
+evidence.
+Primary intervention labels are assigned by a
+rule-based classifier rather than an LLM. Warrant
+labels are derived from the held-out four-identifier
+annotations introduced in §4.1, so the principal
+results do not depend on LLM judging of generated
+responses. Pairwise comparisons use Gemma-4-
+31B-IT (Gemma Team, 2026), evaluating each pair
+in both orders to reduce position bias.
+7.1 Main Results and Training Stability
+We compare DPO with three FPO adaptations: re-
+ward shaping (FAR), friction-based preference pair-
+ing (FPP), and friction-conditioned trust-region
+control (FTR). Table 5 reports the primary-run re-
+sults, and Table 6 summarizes stability across three
+independent training runs.
+FAR and FTR improve intervention F1 over
+DPO while substantially reducing miscalibration
+where intervention is warranted: ECE falls from
+0.432 to 0.227 and 0.178, respectively. Brier score
+independently confirms this result, decreasing from
+0.411 to 0.281 and 0.293. As a strictly proper scor-
+ing rule, Brier score shows that the calibration gain
+is not an artifact of ECE binning or an FPO-specific
+metric. FAR and FTR incur only a modest calibra-
+tion tradeoff on aligned contexts, while InfoEff
+remains comparable, indicating that their gains do
+not arise from intervening indiscriminately.
+Stability across three training runs. We repeat
+the full training and evaluation procedure from
+three independent QLoRA (Dettmers et al., 2023)
+initializations (seeds 42, 123, and 7). Across three
+independent QLoRA initializations, DPO is sub-
+stantially more variable than FAR and FTR: its
+F1 ranges from 0.152 to 0.398 (std. 0.106), com-
+pared with standard deviations of 0.023 and 0.009
+for FAR and FTR, respectively. All six same-seed
+FAR/FTR comparisons against DPO are significant
+under McNemar tests (p ≤ 3 × 10−3; full per-seed
+results in Appendix E.1).
+Failure of preference-only friction. FPP obtains
+superficially high F1 by intervening on every test in-
+stance. Its perfect warranted-context scores follow
+mechanically from perfect recall, while its aligned-
+context ECE of 1.0 and strongly negative judge
+preference expose the collapse. Because its pair-
+wise objective provides no absolute signal for when
+intervention is unnecessary, this result shows that
+friction must regulate behavior at the instance level
+rather than only rank completions.
+Secondary judge evidence. LLM pairwise judg-
+ments favor FAR and FTR in the full sample, but
+the differences become inconclusive after response-
+length control. We therefore treat judge preference
+as secondary to rule-based F1 and calibration.
+7.2 Sources of the Improvement
+We use staged controls to separate three potential
+sources of the downstream gains: friction-aware
+supervision, direct conditioning on per-instance
+friction, and the second-order ToM structure used
+to compute that friction.
+Friction-aware supervision and objective con-
+ditioning. We compare three levels of friction
+use. DPO-FB is fully friction-blind: the chosen
+completion is the observed corpus response and
+the rejected completion is sampled from another
+dialogue without reference to epistemic configu-
+ration. Standard DPO uses friction-informed re-
+sponse pairs but does not receive the per-instance
+friction value. FAR and FTR additionally condition
+their objectives directly on that value.
+As shown in Table 7, the staged progression in-
+creases intervention F1 from 0.282 for DPO-FB
+to 0.344 for DPO and 0.416–0.417 for FAR/FTR.
+Warranted-context Brier error likewise decreases
+from 0.532 to 0.411 and then to 0.281–0.293. This
+pattern is consistent with two separable contribu-
+tions: friction-informed supervision improves over
+friction-blind pairing, while direct per-instance con-
+ditioning provides an additional gain.
+Policy-level contribution of second-order ToM.
+To isolate the proposed ToM extension, we train
+lower-order FAR and FTR variants with the same
+data and objectives but compute friction using only
+surface and first-order channels. This removes
+second-order configurations such as silent intent
+fixing and asymmetric awareness while preserving
+the remaining training setup.
+12769
+
+===== PAGE 8 =====
+Policy F1 ECE warr ECEalign Brierwarr InfoEff Net win vs. DPO
+DPO 0.344 0 .432 0.148 0.411 3.99 —
+FAR 0.416 0 .227 0 .208 0.281 3.92 +15 .8
+FPP† 0.603 0 .000 1 .000 0 .000 3 .78 −91.4
+FTR 0.417 0 .178 0.220 0 .293 3 .94 +13 .3
+Table 5: Primary-run evaluation on the held-out test set (n=278; 120 warranted and 158 aligned contexts). 95%
+bootstrap CIs (B=2,000). Net win is paired win-minus-loss percentage against DPO under Gemma-4-31B-IT.
+Method F1 ECE warr
+DPO 0.298 ± 0.106 0 .523 ± 0.090
+FAR 0.411 ± 0.023 0 .225 ± 0.038
+FTR 0.430 ± 0.009 0 .192 ± 0.011
+Table 6: Mean ± standard deviation across three inde-
+pendent training runs. Per-seed results appear in Ap-
+pendix E.1.
+Condition F1 ECE Brier warr
+DPO-FB 0.282 0 .283 0 .532
+DPO 0.344 0 .174 0 .411
+FAR 0.416 0.152 0 .281
+FTR 0.417 0.189 0 .293
+Table 7: Staged friction controls under the primary-run
+evaluation protocol. DPO-FB removes friction from pair
+construction; DPO uses friction-informed pairs without
+per-instance objective conditioning; FAR and FTR in-
+corporate the friction value directly. ECE is global;
+Brier score is reported on warranted contexts.
+Full ToM-grounded friction improves interven-
+tion F1 under both objectives, from 0.368 to 0.416
+for FAR and from 0.400 to 0.417 for FTR, cor-
+responding to relative gains of 13.0% and 4.3%.
+Because the lower-order variants retain the same
+objectives, data, and surface and first-order chan-
+nels, this provides direct policy-level evidence that
+second-order belief structure contributes beyond
+generic friction conditioning.
+The calibration effects are mixed. Full ToM im-
+proves FAR’s global ECE, whereas lower-order
+FTR achieves lower global ECE, and both lower-
+order variants obtain slightly lower warranted-
+context Brier scores. We therefore interpret the
+second-order contribution as an improvement in
+intervention behavior rather than a general calibra-
+tion advantage. This complements the signal-level
+ablation in §5.3, where removing the second-order
+channel reduces misunderstanding recall from ap-
+proximately 65% to 26%.
+Robustness to friction-module constants. The
+findings are not tied to a single set of hand-specified
+constants. Uniform F − weighting preserves the rel-
+evant configuration ordering, while the proposed
+Objective Friction F1 ∆F1 Rel. gain ECE Brier warr
+FAR Lower-order 0.368 — — 0.270 0.253
+Full ToM 0.416 +0.048 + 13.0% 0.152 0.281
+FTR Lower-order 0.400 — — 0.135 0 .278
+Full ToM 0.417 +0.017 + 4.3% 0 .189 0 .293
+Table 8: Primary-run policy-level ablation of second-
+order ToM. Lower-order variants retain surface and first-
+order friction channels but remove second-order belief
+configurations. ∆F1 and relative gain compare Full
+ToM with the corresponding lower-order variant. ECE
+is global; Brier score is reported on warranted contexts.
+weights sharpen cross-class separation by 11.9%;
+perturbing component weights and scalar mappings
+by up to ±20% does not reverse the key ordering
+or downstream conclusions. Perturbations of the
+F + utility table likewise do not reverse the inter-
+method ranking. We therefore treat these values
+as structurally motivated surrogates rather than fit-
+ted optima; full sensitivity results appear in Ap-
+pendix A.2.
+These staged controls identify three distinct ef-
+fects. Friction-informed pair construction improves
+over friction-blind training; direct per-instance con-
+ditioning provides a further gain; and, holding the
+objective fixed, second-order ToM improves inter-
+vention F1 beyond lower-order friction alone. The
+mixed calibration results also show that the benefit
+of ToM is metric- and objective-dependent rather
+than uniform.
+7.3 Training, Prompting, and Test-Time Belief
+Access
+We compare friction-conditioned training with the
+untrained backbone and inference-time prompt-
+ing. Under the standard inference condition, each
+input includes an observable belief-state pream-
+ble: a compact, schema-derived summary of the
+epistemic information available to the participant-
+agent, appended to the dialogue history. As a
+prompt-engineering baseline, we also evaluate in-
+context learning (ICL) with the untrained Qwen3.5-
+27B (Qwen Team, 2026): five worked examples
+(two divergent and three aligned) plus an instruc-
+tion to ask for intervention, with no fine-tuning.
+12770
+
+===== PAGE 9 =====
+Condition F1 ECE ∆F1 masked
+Base + ToM preamble 0.410 0.146 −0.060
+DPO 0.344 0 .174 −0.014
+FAR 0.416 0 .152 −0.073
+FTR 0.417 0 .189 −0.068
+ICL (random exemplars) 0.510 0.175 —
+ICL (friction scaffold) 0.490 0.146 —
+Table 9: Zero-shot, trained, and in-context conditions
+on the held-out test set. F1 and ECE use the intact belief
+preamble; ∆F1 reports the change when that preamble
+is removed from the same checkpoint. The ICL condi-
+tions use a 2–3k-token scaffold and are not included in
+the masking comparison.
+This tests whether the intervention behavior learned
+through FPO can instead be elicited at inference
+time. Table 9 compares these conditions and re-
+ports the effect of removing the belief preamble
+from each trained checkpoint.
+Base-policy competence and in-context learn-
+ing. With the observable belief preamble, the
+untrained backbone reaches F1 0.410, compara-
+ble to FAR and FTR under this metric and above
+DPO. Thus, substantial intervention competence is
+already accessible to the base model when the rele-
+vant epistemic state is made explicit. ICL raises F1
+further to 0.490–0.510, but random exemplars per-
+form comparably to the friction-informed scaffold.
+The ICL gain therefore appears to reflect generic
+exemplar priming rather than a friction-specific
+prompting advantage. These results suggest that
+FAR and FTR primarily preserve and condition ex-
+isting intervention competence during adaptation
+rather than creating it from scratch.
+Belief-preamble masking. Removing the ob-
+servable preamble reduces F1 by 0.060 for the
+base model and by 0.073 and 0.068 for FAR and
+FTR, respectively. The comparable drops show
+that these policies continue to rely on explicit epis-
+temic information at inference rather than fully in-
+ternalizing it during training. Under masking, FAR
+and FTR nevertheless remain slightly above DPO
+(0.343/0.349 vs. 0.330), indicating some residual
+robustness when the preamble is unavailable. DPO
+changes little under masking, consistent with its
+weaker dependence on instance-specific epistemic
+information.
+These controls refine the role of ToM-grounded
+friction: friction-conditioned training preserves
+context-sensitive intervention behavior without re-
+quiring a long ICL scaffold, but its strongest per-
+formance still depends on the compact observable
+epistemic representation at test time. Full prompt-
+ing specifications and masked-condition results ap-
+pear in Appendix E.2.
+8 Conclusion
+Interactive systems are commonly optimized for
+response quality, yet successful collaboration also
+depends on whether interlocutors maintain suffi-
+ciently compatible interpretations throughout an
+interaction. Our results show that this distinction is
+consequential not only for evaluation, but also for
+representation and learning. By tracking, for each
+referring expression, what each participant intends,
+understands, and believes about the other’s inter-
+pretation, the four-identifier ToM schema renders
+otherwise latent misalignment computationally ac-
+cessible. Within our extraction framework, remov-
+ing the second-order component substantially re-
+duces misunderstanding recovery, indicating that
+lower-order information alone does not capture the
+relational structure needed to identify many dia-
+logue breakdowns.
+Once represented explicitly, these asymmetries
+can serve as supervisory signals rather than merely
+diagnostic annotations. FAR and FTR incorporate
+ToM-grounded friction through distinct optimiza-
+tion mechanisms, yet both improve intervention
+behavior and warranted-context calibration rela-
+tive to DPO while substantially increasing training
+stability. The lower-order ablations further indi-
+cate that these gains are not attributable to generic
+friction conditioning alone, but depend in part on
+second-order information about participants’ inter-
+pretations of one another.
+More broadly, these findings motivate a view of
+dialogue alignment that extends beyond preference
+optimization over utterances toward the regulation
+of evolving belief relations. From this perspective,
+intervention is particularly valuable when locally
+coherent interaction masks incompatible interpre-
+tations that would otherwise persist. Because F −
+is defined over epistemic state rather than tied to
+a specific optimization objective, future work can
+investigate its use as a reweighting, reward-shaping,
+or control signal beyond the FPO variants consid-
+ered here. Ultimately, successful dialogue align-
+ment requires interactive systems to recognize and
+repair emerging misalignment before apparent co-
+ordination consolidates into shared error.
+12771
+
+===== PAGE 10 =====
+Limitations
+Our experiments are conducted on the HCRC Map-
+Task corpus, a controlled navigation task chosen
+because its dense referential grounding and mis-
+matched participant maps provide an ideal testbed
+for evaluating latent epistemic alignment. While
+this structured environment allows for precise eval-
+uation of the four-identifier ToM schema, exploring
+its generalization to less constrained open-domain
+or multi-party dialogue remains an objective for
+future work. Additionally, the misunderstanding
+rate in MapTask (5.5–9.1%) reflects its specific task
+asymmetric design and may vary in other collabo-
+rative corpora.
+The corpus provides first-order perspectivist an-
+notations but no gold second-order mental-state
+labels. We therefore infer the latter with GPT-5.
+A blind human pilot shows substantial agreement
+with these predictions ( κ = 0 .80/0.77), support-
+ing their use as supervisory signals, but it does not
+establish them as ground-truth mental states. More
+generally, our evidence for genuinely non-merged
+perspective-taking remains suggestive rather than
+conclusive. The signal and policy ablations show
+that the second-order representation contributes be-
+yond the lower-order channels tested here, but they
+cannot rule out reliance on correlated linguistic or
+interactional cues rather than genuine mentalizing.
+Friction is computed offline from reconstructed
+epistemic trajectories rather than estimated incre-
+mentally during live interaction. Full cross-party
+ToM information is used to construct this super-
+visory friction signal, but it is not a direct policy
+input: during both training and standard inference,
+the policy receives dialogue history plus the same
+compact agent-observable belief projection. The
+masking experiment shows that performance re-
+mains partly dependent on this representation at
+inference. Fully online estimation, error propaga-
+tion over extended interaction, and rollout-based
+variants such as GRFR therefore remain outside
+the present evaluation.
+Finally, the generality of the friction formula-
+tion remains untested beyond the objectives and
+intervention space studied here. Although F −
+is defined over epistemic state rather than a par-
+ticular optimization objective, we have not estab-
+lished that it transfers as a reweighting, reward-
+shaping, or control signal to other preference- or
+reinforcement-learning methods. F + is more ex-
+plicitly tied to the inherited FPO action space
+(clarify/verify/redirect/refuse); using it in
+other settings would require defining productive
+friction over the corresponding action space. The
+hand-set friction constants are robust to the pertur-
+bations tested here, but this does not establish their
+optimality.
+Acknowledgments
+This research was supported by the NSF National
+AI Institute for Student-AI Teaming (iSAT) under
+grant DRL 2454151. The opinions expressed are
+those of the authors and do not represent views of
+the NSF.
+We used generative AI tools during the prepara-
+tion of this work. Specifically, assistants from the
+Claude, ChatGPT, and Gemma 4 model families
+were used to support literature search, research-
+related coding, and language refinement, includ-
+ing tone and style checking and paraphrasing. All
+literature identified with AI assistance was inde-
+pendently verified and validated by the authors for
+relevance, factual accuracy, and the correctness
+of citation content and formatting. The authors
+reviewed all AI-assisted outputs and take full re-
+sponsibility for the accuracy and integrity of the
+submitted work.
+Potential Risks
+The primary artifact introduced in this work is a
+friction signal derived from Theory-of-Mind in-
+ference over dialogue. While the immediate ap-
+plication is alignment training for collaborative
+dialogue agents, the same underlying machinery
+could, in principle, be deployed to detect and strate-
+gically exploit belief asymmetries between inter-
+locutors rather than to repair them. We explicitly
+flag this dual-use potential for adversarial manip-
+ulation; however, we note that our framework is
+structurally engineered for epistemic stewardship,
+optimizing exclusively for transparency, verifica-
+tion, and mutual repair signals.
+Additionally, our second-order belief inference
+pipeline relies on GPT-5, a proprietary model
+whose latent representations may reflect demo-
+graphic or stylistic biases present in its training data.
+Systematic errors in ToM attribution—particularly
+speaker-side belief inference, where baseline ac-
+curacy is naturally bounded —could cascade into
+miscalibrated friction signals that penalize appro-
+priate conversational progress or incentivize re-
+dundant, costly interventions. Consequently, we
+12772
+
+===== PAGE 11 =====
+strongly advise that any downstream adaptation
+of friction-conditioned policies in high-stakes do-
+mains maintain strict human-in-the-loop oversight
+to audit model calibration during continuous inter-
+action.
+References
+Anne H. Anderson, Miles Bader, Ellen Gurman Bard,
+Elizabeth Boyle, Gwyneth Doherty, Simon Garrod,
+Stephen Isard, Jacqueline Kowtko, Jan McAllister,
+Jim Miller, Catherine Sotillo, Henry S. Thompson,
+and Regina Weinert. 1991. The HCRC Map Task
+corpus. Language and Speech, 34(4):351–366.
+Chunkit Chan, Cheng Jiayang, Yauwai Yim, Zheye
+Deng, Wei Fan, Haoran Li, Xin Liu, Hongming
+Zhang, Weiqi Wang, and Yangqiu Song. 2024. Ne-
+gotiationToM: A benchmark for stress-testing ma-
+chine theory of mind on negotiation surrounding. In
+Findings of the Association for Computational Lin-
+guistics: EMNLP 2024 , pages 4211–4241, Miami,
+Florida, USA. Association for Computational Lin-
+guistics.
+Paul F Christiano, Jan Leike, Tom Brown, Miljan Mar-
+tic, Shane Legg, and Dario Amodei. 2017. Deep
+reinforcement learning from human preferences. In
+Advances in Neural Information Processing Systems,
+volume 30. Curran Associates, Inc.
+Herbert H. Clark. 1996. Using Language. Cambridge
+University Press.
+Herbert H Clark and Susan E Brennan. 1991. Ground-
+ing in communication. In Perspectives on Socially
+Shared Cognition, pages 127–149. American Psycho-
+logical Association.
+Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and
+Luke Zettlemoyer. 2023. Qlora: Efficient finetuning
+of quantized llms. In Advances in Neural Information
+Processing Systems, volume 36, pages 10088–10115.
+Curran Associates, Inc.
+Gemma Team. 2026. Gemma 4 technical report.
+Preprint, arXiv:2607.02770.
+Chuanyang Jin, Yutong Wu, Jing Cao, Jiannan Xiang,
+Yen-Ling Kuo, Zhiting Hu, Tomer Ullman, Antonio
+Torralba, Joshua Tenenbaum, and Tianmin Shu. 2024.
+MMToM-QA: Multimodal theory of mind question
+answering. In Proceedings of the 62nd Annual Meet-
+ing of the Association for Computational Linguis-
+tics (Volume 1: Long Papers), pages 16077–16102,
+Bangkok, Thailand. Association for Computational
+Linguistics.
+Ibrahim Khalil Khebour, Kenneth Lai, Mariah Brad-
+ford, Yifan Zhu, Richard A. Brutti, Christopher Tam,
+Jingxuan Tu, Benjamin A. Ibarra, Nathaniel Blan-
+chard, Nikhil Krishnaswamy, and James Pustejovsky.
+2024. Common ground tracking in multimodal dia-
+logue. In Proceedings of the 2024 Joint International
+Conference on Computational Linguistics, Language
+Resources and Evaluation (LREC-COLING 2024) ,
+pages 3587–3602, Torino, Italia. ELRA and ICCL.
+Hyunwoo Kim, Melanie Sclar, Xuhui Zhou, Ronan Bras,
+Gunhee Kim, Yejin Choi, and Maarten Sap. 2023.
+FANToM: A benchmark for stress-testing machine
+theory of mind in interactions. In Proceedings of the
+2023 Conference on Empirical Methods in Natural
+Language Processing, pages 14397–14413, Singa-
+pore. Association for Computational Linguistics.
+Nan Li, Albert Gatt, and Massimo Poesio. 2026.
+Grounded misunderstandings in asymmetric dia-
+logue: A perspectivist annotation scheme for Map-
+Task. In Proceedings of the Fifteenth Language
+Resources and Evaluation Conference, pages 4988–
+5001, Palma de Mallorca, Spain. ELRA Language
+Resource Association.
+Abhijnan Nath, Carine Graff, Andrei Bachinin, and
+Nikhil Krishnaswamy. 2025. Frictional agent align-
+ment framework: Slow down and don’t break things.
+In Proceedings of the 63rd Annual Meeting of the
+Association for Computational Linguistics (Volume 1:
+Long Papers), pages 11042–11089, Vienna, Austria.
+Association for Computational Linguistics.
+Abhijnan Nath, Hannah VanderHoeven, and Nikhil Kr-
+ishnaswamy. 2026. CRAFT: Grounded multi-agent
+coordination under partial information. Preprint,
+arXiv:2603.25268.
+David Premack and Guy Woodruff. 1978. Does the
+chimpanzee have a theory of mind? Behavioral and
+Brain Sciences, 1(4):515–526.
+James Pustejovsky and Nikhil Krishnaswamy. 2025.
+Frictive policy optimization for LLM agent interac-
+tions. In Proceedings of the AAMAS-25 Workshop on
+Rebellion and Disobedience in AI (RaD-AI).
+James Pustejovsky and Nikhil Krishnaswamy. 2026.
+Frictive policy optimization for LLMs: Epistemic in-
+tervention, risk-sensitive control, and reflective align-
+ment. Preprint, arXiv:2604.25136.
+François Quesque and Yves Rossetti. 2020. What do
+theory-of-mind tasks actually measure? theory and
+practice. Perspectives on Psychological Science ,
+15(2):384–396. PMID: 32069168.
+Qwen Team. 2026. Qwen3.5: Towards native multi-
+modal agents.
+Rafael Rafailov, Archit Sharma, Eric Mitchell, Christo-
+pher D Manning, Stefano Ermon, and Chelsea Finn.
+2023. Direct preference optimization: Your language
+model is secretly a reward model. In Advances in
+Neural Information Processing Systems, volume 36,
+pages 53728–53741. Curran Associates, Inc.
+Matthew Riemer, Zahra Ashktorab, Djallel Bouneffouf,
+Payel Das, Miao Liu, Justin D. Weisz, and Murray
+Campbell. 2025. Position: Theory of mind bench-
+marks are broken for large language models. In Pro-
+ceedings of the 42nd International Conference on
+12773
+
+===== PAGE 12 =====
+Machine Learning, volume 267 of Proceedings of
+Machine Learning Research , pages 82091–82130.
+PMLR.
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu,
+Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan
+Zhang, Y . K. Li, Y . Wu, and Daya Guo. 2024.
+Deepseekmath: Pushing the limits of mathemati-
+cal reasoning in open language models. Preprint,
+arXiv:2402.03300.
+Aaditya Singh, Adam Fry, Adam Perelman, Adam Tart,
+Adi Ganesh, Ahmed El-Kishky, Aidan McLaughlin,
+Aiden Low, AJ Ostrow, Akhila Ananthram, Akshay
+Nathan, Alan Luo, Alec Helyar, Aleksander Madry,
+Aleksandr Efremov, Aleksandra Spyra, Alex Baker-
+Whitcomb, Alex Beutel, Alex Karpenko, and 466
+others. 2026. OpenAI GPT-5 system card. Preprint,
+arXiv:2601.03267.
+Dan Sperber and Deirdre Wilson. 1986. Relevance:
+Communication and Cognition . Language and
+Thought Series. Harvard University Press.
+Ronald J. Williams. 1992. Simple statistical gradient-
+following algorithms for connectionist reinforcement
+learning. Machine Learning, 8(3):229–256.
+Heinz Wimmer and Josef Perner. 1983. Beliefs about
+beliefs: Representation and constraining function of
+wrong beliefs in young children’s understanding of
+deception. Cognition, 13(1):103–128.
+Yifan Zhu, Mariah Bradford, Kenneth Lai, Timothy
+Obiso, Videep Venkatesha, James Pustejovsky, and
+Nikhil Krishnaswamy. 2026a. Distributed partial
+information puzzles: Examining common ground
+construction under epistemic asymmetry. In Pro-
+ceedings of the Fifteenth Language Resources and
+Evaluation Conference, pages 4974–4987, Palma de
+Mallorca, Spain. ELRA Language Resource Associa-
+tion.
+Yifan Zhu, Kyeongmin Rim, and James Pustejovsky.
+2026b. From propositional to perceptual asymmetry:
+Extending FPO to asymmetric partial information
+dialogue. In Proceedings of the 27th Annual Meet-
+ing of the Special Interest Group on Discourse and
+Dialogue, pages 403–413, Atlanta, Georgia, USA.
+Association for Computational Linguistics.
+A Friction Specification and Sensitivity
+A.1 F − Component Surrogates
+Table 10 gives the complete scalar mappings used
+to instantiate the four components of F −. All val-
+ues are deterministic surrogates normalized to[0, 1]
+rather than parameters fitted to the evaluation data.
+UNC is derived from addressee uptake quality.
+CONTR uses the strongest active repair-oriented
+surface signal, rather than averaging multiple mark-
+ers. HAZ uses the strongest applicable map-level
+Component Condition Score
+UNC
+committed 0.05
+hesitant 0.55
+withheld 0.70
+absent 0.40
+CONTR
+contradict 0.85
+repair 0.65
+request_clarify 0.55
+pause 0.20
+acknowledge 0.05
+none 0.00
+HAZ
+existence asymmetry 0.65
+multiplicity divergence 0.55
+lexical variant 0.30
+otherwise 0.00
+VALCONF
+no divergence 0.00
+diverged, neither aware 0.95
+diverged, one aware 0.55
+diverged, both aware 0.25
+Table 10: Complete scalar mappings used by the F −
+friction components.
+risk condition and is additionally scaled by remain-
+ing task length using len_mult ∈ {0.7, 1.0, 1.3}.
+VALCONF is determined by the four-identifier be-
+lief relations: referential divergence is 1⃝ ̸= 2⃝;
+speaker awareness is 3⃝ ̸= 1⃝; and addressee
+awareness is 4⃝ ̸= 2⃝ or is surfaced through repair-
+oriented signals.
+A.2 Sensitivity to Design-Choice Constants
+The friction module contains two sets of hand-
+specified constants: the component weights
+w=(0.15,0.20,0.30,0.35) and the categorical-to-
+scalar mappings described above. We perturb
+individual and joint component weights by δ ∈
+{−20%, −10%, +10%, +20%} and separately ap-
+ply uniform perturbations to the scalar mappings.
+For each condition, we recompute F − over all 278
+held-out instances, the configuration ordering, and
+the FTR coefficient β(h) = 1/(ϵ0 + κF −(h)).
+The perturbations preserve the structurally in-
+formative configuration ordering and maintain a
+substantial gap between silent_intent_fixing
+and aligned_deep (Table 11). The FTR risk con-
+trast likewise remains stable, while perturbing the
+F + utility values changes InfoEff quantitatively
+without reversing the inter-method ordering.
+We additionally compare the proposed weighting
+with the non-informative uniform alternative w =
+(0.25, 0.25, 0.25, 0.25). Both preserve the pending–
+misunderstood ordering (∆ = +0 .218 proposed;
++0.179 uniform), while the proposed weighting in-
+creases cross-class separation by 11.9% (0.463 vs.
+12774
+
+===== PAGE 13 =====
+Perturbation Cfg Kendall τ Cfg gap β-ratio InfoEff rank
+Reference 0.867⋆ +0.46 2 .12 DPO < FAR/FTR
+δ= − 20% (uniform W ) 0.867⋆ +0.37 1 .93 preserved
+δ= − 10% (uniform W ) 0.867⋆ +0.42 2 .03 preserved
+δ= + 10% (uniform W ) 0.867⋆ +0.51 2 .17 preserved
+δ= + 20% (uniform W ) 0.867⋆ +0.56 2 .18 preserved
+δ= ± 20% (single wk, worst case) ≥ 0.733 +0 .40 1 .93 preserved
+δ= ± 20% (scalar map, uniform) ≥ 0.733 +0 .37 1 .93 preserved
+Table 11: Sensitivity to friction-module constants ( n=278). Cfg τ: Kendall rank-correlation of per-
+configuration mean F − vs. reference. Cfg gap: F −(silent_intent_fixing) − F −(aligned_deep). β-ratio:
+β(aligned_deep)/β(silent_intent_fixing) under FTR. InfoEff rank: whether DPO < {FAR,FTR} survives.
+⋆Single near-zero tie between multiplicity_suspicious and aligned_with_repair (∆=0.005); all five struc-
+turally informative pairs are concordant in every perturbation.
+Configuration clar. verif. redir. refuse
+Divergent:
+silent_intent_fixing 0.85 0.95 0.55 0 .20
+asym_aware_speaker_only 0.85 0 .80 0 .45 0 .15
+asym_aware_addressee_only 0.85 0 .70 0 .45 0 .15
+open_dispute 0.70 0 .80 0 .50 0 .10
+multiplicity_suspicious 0.75 0.85 0.40 0 .10
+Aligned:
+aligned_deep 0.05 0 .10 0 .05 0 .02
+aligned_with_repair 0.40 0 .40 0 .20 0 .05
+Underdetermined:
+underspecified 0.90 0.50 0 .25 0 .05
+existence_query 0.20 0 .30 0 .10 0 .05
+Table 12: F +(h, a) values by referential configuration
+and intervention type.
+0.414). We therefore treat the constants as robust
+structural surrogates rather than claiming that they
+are optimal.
+A.3 F + Productive-Friction Utility
+In the offline setting, INFO GAIN (h, a) is imple-
+mented as the lookup table in Table 12. Di-
+agnostic actions ( clarify, verify) receive the
+highest values on divergent states, especially
+silent_intent_fixing, where neither partici-
+pant locally detects the mismatch. Corrective ac-
+tions ( redirect, refuse) are scored lower be-
+cause they assume the source of divergence is
+already identifiable and impose greater conversa-
+tional cost. Aligned states receive near-zero values,
+encoding that unnecessary intervention yields little
+epistemic gain.
+B ToM Extraction and Validation
+B.1 Preliminary Representation Alternatives
+Two preliminary formulations motivated the final
+four-identifier schema. First, local-context belief
+prediction performed below a constant-True base-
+line. In particular, latent divergence was frequently
+not identifiable from the immediate referring-
+expression context and became attributable only
+after subsequent repair, contradiction, or task fail-
+ure.
+We therefore adapted the retrospective ground-
+ing cascade of Li et al. (2026), allowing later
+dialogue evidence to inform the belief state at-
+tributed at the original reference. Although this
+improved contextual access, the representation re-
+mained structurally insufficient: grounding was
+encoded as an intra-party binary outcome, whereas
+silent divergence occurs when two participants con-
+fidently ground the same expression to different
+referents.
+These preliminary results motivated two prop-
+erties of the final representation: beliefs are at-
+tributed to the state at the time of the reference
+while allowing retrospective evidence for offline
+reconstruction, and first- and second-order beliefs
+are represented separately across participants.
+B.2 Human Annotation Protocol
+Because the corpus contains no native second-order
+belief labels, we independently evaluated GPT-5’s
+second-order predictions in a blind human annota-
+tion pilot. We conducted a blind human-annotation
+pilot on a stratified sample of 60 referring ex-
+pressions drawn from the held-out test partition
+(ntest = 761 ). Sampling enforced a minimum
+of eight items per configuration class whenever
+class frequency permitted, ensuring coverage of
+all eight epistemic configurations, including diver-
+gent cases such as silent_intent_fixing and
+multiplicity_suspicious. The annotator is an
+author of this paper, fluent in English and familiar
+with both the HCRC MapTask corpus and the four-
+identifier ToM schema introduced in §4.1. The pi-
+lot was designed to evaluate whether GPT-5 second-
+12775
+
+===== PAGE 14 =====
+order predictions aligned with human-interpretable
+referential judgments under the proposed schema,
+rather than to establish inter-annotator agreement
+for the schema itself.
+For each item, the annotator had access to the
+dialogue context preceding the target referring ex-
+pression, the target expression itself, speaker role
+(giver or follower), dialogue and map identifiers,
+and the corresponding MapTask map images for
+both the giver and the follower. This matches the
+GPT-5 prompting condition (§4.1) on the dialogue-
+text and map-vision channels; the only information
+unavailable to the annotator was the inline dialogue-
+act annotation stream additionally consumed by
+GPT-5 for surface-signal grounding. GPT-5 outputs
+were withheld throughout annotation to prevent an-
+choring effects. The worksheet header provided
+the following written instructions:
+For each row, check the corresponding
+map and read the dialogue_context
+and target_re_text. Second-order ToM
+refers to what each participant believes
+the other participant meant or under-
+stood. Fill in predicted landmark identifiers
+for user_speaker_tom_landmark and
+user_addressee_tom_landmark. Use corpus
+landmark identifiers where possible (e.g.,
+m3_sandstone_cliffs#0@g); free-text descrip-
+tions are also acceptable. Enter unknown if the
+referent cannot be determined from dialogue
+evidence alone.
+No additional verbal instructions were provided.
+Annotation was completed in a single session of
+approximately two hours, producing 120 second-
+order labels (60 × 2 identifier slots). The worksheet
+was edited in spreadsheet format and exported to
+CSV .
+Agreement was computed using an automated
+scoring script that canonicalized map prefixes
+(m3_, m10_), instance indices ( #0), map-role
+suffixes ( @f, @g), common spelling variants
+(wheat_fields/wheatfields), and leading arti-
+cles before exact-match comparison. Cohen’s κ is
+reported over the canonicalized labels. The HCRC
+MapTask corpus (Anderson et al., 1991) is publicly
+released for academic research and contains no per-
+sonally identifying or sensitive material. The anno-
+tation task involved only referential interpretation
+over existing corpus data. The annotator received
+no separate compensation and performed the work
+as part of routine research activity. Because the
+pilot involved only author annotation over publicly
+available data, IRB review was not sought.
+C Data Preprocessing and Split
+Construction
+For each MapTask dialogue, inline referring-
+expression annotations are aligned with the cor-
+responding giver- and follower-specific belief an-
+notations. Referring expressions spanning multiple
+same-speaker continuation turns are stitched into
+a single target span while intervening utterances
+are preserved, so reconstruction does not remove
+conversational evidence occurring within the refer-
+ence. Each resulting instance retains the dialogue
+history through the target expression and the fol-
+lowing eight utterances used for completion-side
+evaluation.
+Dialogues are partitioned at the dialogue level
+rather than the referring-expression level. Split-
+ting is stratified by misunderstood-RE density to
+preserve a range of dialogue difficulty, with de-
+velopment dialogues selected near the distribution
+median to reduce prompt selection from being dom-
+inated by unusually easy or difficult interactions.
+The representation-level split contains 2,705
+training REs and 761 held-out test REs. Before
+policy adaptation, we remove instances that are
+underspecified for the required referential compari-
+son and explicit existence-query cases, for which
+questioning itself reveals the relevant information
+asymmetry. The resulting policy cache contains
+663 training instances and 278 held-out evalua-
+tion instances. Thus, the larger split is used for
+extraction and friction-signal validation, whereas
+the filtered subset defines the policy-training and
+downstream-evaluation setting.
+D Offline Trainer Implementation
+D.1 FAR Offline Adaptation
+Applying FAR to the offline corpus requires two
+adaptations. First, on divergent rows the observed
+corpus response may itself be a silent acknowledg-
+ment. Assigning a negative task reward to this com-
+pletion without an alternative target caused training
+collapse in pilot runs. We therefore retarget diver-
+gent rows to the corresponding corpus-retrieved
+repair completion and use Rtask = +1 after retar-
+geting.
+Second, the original policy-gradient formulation
+assumes on-policy rollouts, which are unavailable
+in the fixed RE-level corpus. We therefore use RE-
+INFORCE with running-mean baseline subtraction
+(Williams, 1992) and reward clipping.
+12776
+
+===== PAGE 15 =====
+D.2 FPP Offline Adaptation
+Three adjustments are required for FPP in the of-
+fline setting. First, F +(answer) is not defined by
+the intervention lookup table. For aligned pairs we
+therefore use
+F +(answer | aligned) = 1 − max
+a
+F +(h, a),
+without modifying the underlying friction module.
+Second, because F − varies substantially across
+epistemic configurations, we weight each pair by
+w(h) ∝ F −(h) + ε,
+so that higher-risk rows contribute more strongly
+to the preference objective.
+Third, only 9.3% of divergent corpus repair
+templates are recognized by the rule-based in-
+tervention classifier without lexical augmentation.
+For divergent chosen completions that do not al-
+ready expose the relevant class, we prepend a
+minimal marker: sorry→clarify, so→verify,
+no→redirect, and i can’t→refuse.
+D.3 FTR Implementation
+For the single-completion offline setting, exact
+sequence-level KL is not directly available. We
+use the non-negative k3 estimator
+ˆKL = r − 1 − log r,
+where r is the policy/reference likelihood ratio. Pi-
+lot experiments with signed and squared log-ratio
+estimators did not preserve the desired asymme-
+try with respect to decreases in gold-completion
+probability.
+We set Risk(h) = F −(h) directly rather than
+fitting a separate risk predictor. With ϵ0 = 1.0 and
+κ = 3.0,
+β(h) = 1ϵ0 + κF −(h)
+falls in approximately [0.36, 1.0] over the observed
+friction range. Tighter regimes over-anchored the
+policy in pilot runs and increased calibration error.
+E Additional Evaluation
+E.1 Per-Seed Stability
+Repeating the full train-and-evaluate protocol from
+three independent QLoRA initializations (seeds 42,
+123, and 7) yields two complementary patterns.
+First, the FAR/FTR advantage replicates at the
+individual-run level: all six same-seed comparisons
+Method Seed F1 ECE ECE warr Net win vs DPO
+DPO
+42 0.344 0 .174 0 .432 —
+123 0.152 0 .233 0 .646 —
+7 0.398 0 .299 0 .491 —
+FAR
+42 0.439 0 .147 0 .234 +14 .4
+123 0.409 0 .142 0 .174 +24 .5
+7 0.383 0 .178 0 .265 +42 .5
+FPP
+42 0.000 0 .161 0 .512 −38.8
+123 0.000 0 .161 0 .512 −21.6
+7 0.000 0 .161 0 .512 n/a
+FTR
+42 0.417 0 .189 0 .178 +13 .3
+123 0.434 0 .230 0 .205 +17 .6
+7 0.438 0 .188 0 .193 +36 .7
+Table 13: Per-seed breakdown of Table 6. FPP’s
+F1/ECE/ECEwarr are identical across seeds by construc-
+tion; its win rate vs. DPO still varies because DPO’s
+completions change per seed.
+against DPO are significant under McNemar tests
+(p ≤ 3 × 10−3), with net margins of +14.4–+42.5
+percentage points for FAR and +13.3–+36.7 for
+FTR.
+Second, DPO is substantially more variable
+across initializations. Its F1 ranges from 0.152
+to 0.398 (std. 0.106), and warranted-context ECE
+reaches 0.646 in the weakest run, whereas FAR
+and FTR have F1 standard deviations of 0.023 and
+0.009. Because only three seeds are available, ag-
+gregate seed-paired tests are underpowered; we
+therefore interpret the cross-run result primarily as
+evidence of greater training stability rather than as
+a precise estimate of between-method variance.
+E.2 Prompting and Preamble Masking
+Belief-state preamble. Every prompt_user
+field is built from a fixed template: a first-order
+belief block (the speaker’s own anchoring of
+the current referring expression to a landmark
+instance on their map, derived from the schema-
+extracted speaker_belief/addressee_belief
+identifiers) followed by a Dialogue history:
+marker and the dialogue so far. No second-
+order ( speaker_tom/addressee_tom) content
+appears in the prompt at inference under any
+trained policy; those channels are used only
+to construct the friction-conditioned training
+objective. An example (test set, configuration
+multiplicity_suspicious):
+Your current belief state:
+- You have anchored the partner’s
+reference to the wheat fields (instance
+#1) on your map (upper).
+- You believe the partner meant the
+12777
+
+===== PAGE 16 =====
+wheat fields (instance #1) on your map
+(upper).
+Dialogue history:
+G: right so the start is at the top
+left-hand side of the page
+F: uh-huh
+[. . . ]
+G: no hold on wait a minute am i right
+under the sandstone cliffs
+The masked condition removes everything be-
+fore the Dialogue history: marker verbatim,
+leaving the dialogue turns (and all other prompt
+content) untouched.
+In-context learning scaffold. The ICL
+condition prompts the untrained base policy
+with a fixed instruction plus N =5 few-shot
+examples (seed 42; 2 drawn from divergent
+configurations { silent_intent_fixing,
+multiplicity_suspicious,
+asymmetric_aware_*, open_dispute}, 3
+from aligned configurations, sampled from the
+training split), each example truncated to its
+dialogue and gold completion:
+Below are examples of correct responses
+in a MapTask collaboration. Study them,
+then respond in the same style.
+Example 1:
+Dialogue:
+[dialogue excerpt]
+Correct response: [gold completion]
+[. . . 4 more examples. . . ]
+Now respond to the following dialogue.
+If the speaker’s reference is ambiguous
+or you cannot resolve it from the
+dialogue evidence and your map, ask a
+brief clarifying question. Otherwise
+acknowledge and proceed.
+This scaffold ( ∼2–3k tokens) is prepended to
+each test row’s own belief preamble and dialogue.
+The generic control (ICL random exemplars) uses
+the same five-slot template with exemplars sampled
+irrespective of configuration and the final instruc-
+tion sentence removed, isolating the contribution
+of exemplar priming from the friction-specific in-
+struction.
+12778

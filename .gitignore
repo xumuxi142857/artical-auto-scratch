@@ -1,0 +1,5 @@
+﻿_automation/logs/
+_automation/smoke/
+*.tmp
+Thumbs.db
+Desktop.ini
