@@ -28,5 +28,17 @@ if (-not $pending) {
 & $git -C $root commit -m $Message | Out-Null
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-& $git -C $root push origin main
-exit $LASTEXITCODE
+# github.com:443 is flaky on this network (api.github.com stays up); retry with backoff.
+$pushed = $false
+for ($i = 1; $i -le 8; $i++) {
+  & $git -C $root push origin main
+  if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+  Write-Output ("push failed (attempt " + $i + "), retrying in 45s")
+  Start-Sleep -Seconds 45
+}
+
+if (-not $pushed) {
+  Write-Output 'push still failing; commit is local only -- run sync again later'
+  exit 1
+}
+exit 0
