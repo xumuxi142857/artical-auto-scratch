@@ -1,0 +1,65 @@
+{
+  "01_ICML2026_From-Shortcuts-to-Reasoning-ToM-with-RL": {
+    "title": "From Shortcuts to Reasoning: Robust Post-Training of Theory of Mind with Reinforcement Learning",
+    "venue": "ICML 2026",
+    "pdf": "原文_ICML2026正式版_PMLR306.pdf",
+    "imported_at": "2026-11-05 10:23:07",
+    "date": "2026-11-04"
+  },
+  "02_ICML2026_MindZero-Online-Mental-Reasoning": {
+    "title": "MindZero: Learning Online Mental Reasoning With Zero Annotations",
+    "venue": "ICML 2026",
+    "pdf": "原文_ICML2026正式版_PMLR306.pdf",
+    "imported_at": "2026-11-05 10:23:09",
+    "date": "2026-11-04"
+  },
+  "03_ACL2026_GroupToM-Bench-Group-Theory-of-Mind": {
+    "title": "GroupToM-Bench: Benchmarking Group Theory of Mind and Nonlinear Social Emergence in MLLMs",
+    "venue": "ACL 2026",
+    "pdf": "原文_ACL2026正式版.pdf",
+    "imported_at": "2026-11-05 10:23:12",
+    "date": "2026-11-04"
+  },
+  "04_AAAI2026_Reality-vs-Counterfactual-ToM": {
+    "title": "Reality vs Counterfactual: Multi-World Contrastive Reinforcement Learning for Enhancing MLLM's Theory of Mind in Egocentric Videos",
+    "venue": "AAAI 2026",
+    "pdf": "原文_AAAI2026正式版.pdf",
+    "imported_at": "2026-11-05 10:23:14",
+    "date": "2026-11-04"
+  },
+  "05_AAAI2026_RecToM-Benchmark": {
+    "title": "RecToM: A Benchmark for Evaluating Machine Theory of Mind in LLM-based Conversational Recommender Systems",
+    "venue": "AAAI 2026",
+    "pdf": "原文_AAAI2026正式版.pdf",
+    "imported_at": "2026-11-05 10:23:16",
+    "date": "2026-11-04"
+  },
+  "06_EMNLP2026_Mind-the-Gap-Epistemic-Alignment": {
+    "title": "Mind the Gap: Theory-of-Mind-Grounded Friction for Epistemic Alignment",
+    "venue": "EMNLP 2026",
+    "pdf": "原文_EMNLP2026正式版.pdf",
+    "imported_at": "2026-11-05 10:23:17",
+    "date": "2026-11-04"
+  },
+  "07_AAAI2026_MovieGraph-ToM": {
+    "title": "MovieGraph-ToM: Evaluating Long-Range Theory of Mind in Large Language Models via Implicit Social-Causal Graphs",
+    "venue": "AAAI 2026",
+    "pdf": "原文_AAAI2026正式版.pdf",
+    "imported_at": "2026-11-05 10:23:19",
+    "date": "2026-11-04"
+  },
+  "08_ACL2026_CoSToM-Causal-Steering": {
+    "title": "CoSToM: Causal-oriented Steering for Intrinsic Theory-of-Mind Alignment in Large Language Models",
+    "venue": "ACL 2026",
+    "pdf": "原文_ACL2026正式版.pdf",
+    "imported_at": "2026-11-05 10:23:21",
+    "date": "2026-11-04"
+  },
+  "09_AAAI2026_From-Stimuli-to-Minds-BRL": {
+    "title": "From Stimuli to Minds: Enhancing Psychological Reasoning in {LLMs} via Bilateral Reinforcement Learning",
+    "venue": "AAAI 2026",
+    "pdf": "原文_AAAI2026正式版.pdf",
+    "imported_at": "2026-11-05 10:23:23",
+    "date": "2026-11-04"
+  }
+}

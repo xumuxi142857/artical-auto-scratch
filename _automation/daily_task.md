@@ -65,14 +65,34 @@
 - 备选池（今天看过但没选的，写清落选原因，供明天用）
 - 明天建议
 
-## 五、收尾报告
+## 五、同步与导入
+
+按顺序做两件外部同步，失败也不要中断流程，记进报告即可：
+
+1. **导入 Zotero**（Zotero 开着才有效，它的 connector 在 `127.0.0.1:23119`）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "_工具与原文提取\zotero_sync.ps1" --date <日期>
+```
+
+   - 退出码 0 = 全部导入；2 = Zotero 没开（在报告里写“Zotero 未启动，待下次导入”）；1 = 部分失败（把失败的文件夹名记进报告）。
+   - 只导新文件夹，已导过的记在 `_zotero\imported.json`，不要用 `--force` 重导（会产生重复条目）。
+
+2. **推 GitHub**（github.com 在这台机器上时通时不通，脚本自带重试）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "_工具与原文提取\sync_to_github.ps1" -Message "论文: <日期> 3篇（会议A/会议B/会议C）"
+```
+
+## 六、收尾报告
 
 写 `_automation\logs\<日期>-report.md`：
 - 今天选了哪 3 篇（会议、标题、CCF、路径）
 - 下载/翻译过程中遇到的坑与解决办法
+- Zotero 导入结果（成功几篇 / 是否因 Zotero 未启动跳过）、GitHub 推送结果（成功或本地已提交待重推）
 - 未完成项与原因（例如正式版 PDF 拿不到、某篇找不到录用出处）
 
-## 六、纪律
+## 七、纪律
 
 - 拿不到的数据不要编：查不到页码/DOI 就在 README 写“未核实”。
 - 不要修改已有日期文件夹里的旧文件（除非是修错别字级别的明显笔误，并在报告里说明）。

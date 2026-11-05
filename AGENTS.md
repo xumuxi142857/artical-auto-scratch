@@ -43,4 +43,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "_工具与原文提取\sync
   2. `翻译_正文中文.docx` —— **译文只交 Word**。生成时可以临时用 Markdown 走 `md2docx.py`，但**交付前必须删掉 .md 与 part*.md**，文件夹里不留 Markdown。
   3. `README.md` —— 会议/CCF/出版信息/链接/贡献/关键数字/阅读建议/BibTeX。
   当天另有 `00_今日索引_<日期>.md`（这个 .md 要保留，它是索引不是译文）。
-- 工具脚本在 `_工具与原文提取\`：`extract.py`（PDF→txt）、`merge_parts.py`、`md2docx.py`（md→docx）、`sync_to_github.ps1`（同步）。
+- 工具脚本在 `_工具与原文提取\`：`extract.py`（PDF→txt）、`merge_parts.py`、`md2docx.py`（md→docx）、`sync_to_github.ps1`（同步）、`zotero_import.py` / `zotero_sync.ps1`（导入 Zotero）。
+
+## 6. 导入 Zotero（每批收完就做）
+
+本机 Zotero 10 装在 `D:\zotero\zotero.exe`，数据目录 `C:\Users\32531\Zotero`。**只要 Zotero 开着**，它的内置 connector 服务就会监听 `127.0.0.1:23119`，可以免插件、免 API key、免重启地把条目和 PDF 推进去：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "_工具与原文提取\zotero_sync.ps1" --date 2026-11-05
+```
+
+- 机制：`POST /connector/saveItems` 建条目（元数据来自每篇 README 里的 BibTeX）+ `POST /connector/saveAttachment` 把本地 PDF 字节直接传过去（同 sessionID，条目 `id` 作为 parentItemID）。
+- 元数据口径：标题/作者/会议论文集/卷/页码/DOI/URL 全部取 README 的 BibTeX；标签自动加 `会议 年份`、`CCF-A`/`CCF-B`、`ToM`/`GRPO`/`心智推理`（按标题+摘要命中）、`DSH-auto`；并附子笔记（一句话概括 + 主要结果 + 本地文件夹路径）。
+- PDF 会被**复制**进 Zotero 的 `storage\`，原文件夹不动；Zotero 会自动把附件改名为 `作者 - 年份 - 标题.pdf`。
+- 去重：已导入的记在 `_zotero\imported.json`（按文件夹名），重复运行只导新的；要重导用 `--force`。
+- 其它开关：`--list`（看哪些已导/未导）、`--dry-run`（只打印）、`--limit N`。
+- Zotero 没开时脚本以退出码 2 结束并提示，**不要因此中断当天流程**，在收尾报告里记一句“Zotero 未启动，待下次导入”即可。
+- 注意：connector 只能新建条目，不能改/删；条目元数据写错了只能在 Zotero 里手改。
