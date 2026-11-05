@@ -20,13 +20,21 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # Anything staged?
 $pending = & $git -C $root diff --cached --name-only
-if (-not $pending) {
+if ($pending) {
+  & $git -C $root commit -m $Message | Out-Null
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+else {
   Write-Output 'nothing to commit'
-  exit 0
 }
 
-& $git -C $root commit -m $Message | Out-Null
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Push if there are unpushed commits (a previous run may have committed but failed to push).
+$unpushed = & $git -C $root rev-list --count origin/main..main
+if ([int]$unpushed -eq 0) {
+  Write-Output 'already up to date with origin/main'
+  exit 0
+}
+Write-Output ("unpushed commits: " + $unpushed)
 
 # github.com:443 is flaky on this network (api.github.com stays up); retry with backoff.
 $pushed = $false
