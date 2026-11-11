@@ -61,5 +61,26 @@
     "pdf": "原文_AAAI2026正式版.pdf",
     "imported_at": "2026-11-05 10:23:23",
     "date": "2026-11-04"
+  },
+  "01_NeurIPS2026_Perception-Not-Reasoning-Visual-ToM": {
+    "title": "Perception, Not Reasoning, Limits Visual Theory of Mind",
+    "venue": "NEURIPS 2026",
+    "pdf": "原文_arXiv2611.10694.pdf",
+    "imported_at": "2026-11-11 16:40:50",
+    "date": "2026-11-11"
+  },
+  "02_NeurIPS2026_Mental-Models-Multi-Agent": {
+    "title": "Mental-Models for Multi-Agent Systems",
+    "venue": "NEURIPS 2026",
+    "pdf": "原文_arXiv2610.12453.pdf",
+    "imported_at": "2026-11-11 16:40:52",
+    "date": "2026-11-11"
+  },
+  "03_EMNLP2026_SocialArena-Social-Intelligence": {
+    "title": "SocialArena: Evaluating Social Intelligence in Large Language Models",
+    "venue": "EMNLP 2026",
+    "pdf": "原文_EMNLP2026正式版.pdf",
+    "imported_at": "2026-11-11 16:40:53",
+    "date": "2026-11-11"
   }
 }

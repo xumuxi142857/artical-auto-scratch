@@ -1,0 +1,1660 @@
+
+
+===== PAGE 1 =====
+Perception, Not Reasoning, Limits
+Visual Theory of Mind
+Mohamed Rayan Barhdadi1 Syed Talal Wasim2,3 Juergen Gall2,3
+Erchin Serpedin1 Hasan Kurban4
+1Texas A&M University 2University of Bonn
+3Lamarr Institute for Machine Learning and Artificial Intelligence
+4Hamad Bin Khalifa University
+Abstract
+Vision-language models pass text-based false-belief probes at near-human levels
+but drop by over twenty percentage points on abstract panels the moment the same
+problem is conveyed visually. The consensus diagnosis is conceptual, prescribing
+new belief-reasoning modules. We argue the dominant bottleneck is perceptual:
+not what the model cannot reason about, but what it cannot see. We propose a five-
+condition dissociation protocol that holds the reasoning task constant while varying
+perceptual fidelity from visual only to text only, and quantify the result with the Per-
+ceptual Contribution Ratio, the share of the visual-to-text gap a given fidelity closes.
+We test this on two kinds of scenes: abstract 2D panels in the Heider–Simmel
+tradition, and naturalistic 3D game scenes from MuMA-ToM and MindPower.
+The evaluation covers seven VLMs and roughly 159,000 API calls. Ground-truth
+scaffolds substantially close the gap in every setting, and on the abstract panels and
+MuMA-ToM they match or exceed the text-only reasoning. Whereas scaffolds built
+by automatic parsers, including frontier VLMs, fail. The most common error in the
+visual-only condition isreality bias, which accounts for 60% of false-belief failures.
+Models report where an object actually is, not where an absent agent believes it is.
+This points to a perceptual front-end that fails to track which agents were present
+at each moment. Under the evaluated protocol, structured visual scene-state extrac-
+tion, rather than belief inference, is the dominant bottleneck for visual ToM. Project
+page:kurbanintelligencelab.github.io/perception-not-reasoning.
+Figure 1:Visual Theory of Mind is limited by perceptual scene-state extraction.Left:on a
+Sally-Anne probe, the VLM under visual-only input (A) reports the ball’s current location (reality
+bias); a ground-truth scaffold (Bf ) recovers the absent agent’s belief.Right:per-model visual-only
+vs. text-only accuracy on abstract 2D panels, MindPower [39], and MuMA-ToM [29]. Ground-truth
+scaffolds close the gap (PCRf ≥1on abstract and MuMA-ToM); automatic parsers do not.
+Corresponding authors:rayan.barhdadi@tamu.eduandhkurban@hbku.edu.qa.
+40th Conference on Neural Information Processing Systems (NeurIPS 2026). Track on Evaluations and Datasets.
+arXiv:2611.10694v1  [cs.CV]  7 Nov 2026
+
+===== PAGE 2 =====
+1 Introduction
+Children come to read other minds through a sequence of perceptual achievements, not a single con-
+ceptual leap. Infants individuate objects behind occluders by three to five months [31], read motion as
+goal-directed by six to twelve months [38, 9], and pass false-belief tasks by roughly age four [37, 5,
+36]. Each capacity requires the previous as input: a goal cannot be attributed to an entity not yet indi-
+viduated, and a belief cannot be modeled for an agent whose goals cannot be parsed [6, 17]. The Sally-
+Anne false-belief task, the canonical assay for Theory of Mind, sits at the top of this chain [5, 25].
+When this task was adapted for large language models, frontier systems passed text-based probes
+at near-human levels [16, 33]. The moment the same problem is conveyed visually, performance
+collapses by twenty or more percentage points across every VLM tested [ 18, 8], with even larger
+gaps on naturalistic multi-agent video [29, 14, 39]. The consensus diagnosis is conceptual: VLMs
+are taken to lack the machinery belief attribution requires, prescribing explicit social-reasoning
+modules atop existing visual encoders [35, 27, 28].
+We argue that this diagnosis is incomplete. The bottleneck is not what the model cannot reason
+about; it is what it cannot see. If a VLM solves a false-belief problem at 94.5% in text but only
+73.9% in pixels, the deficit lies in the perceptual pipeline that converts pixels into propositions, not
+in the reasoning that operates on them. We call this theperceptual bottleneck hypothesis: visual
+ToM failures reflect breakdowns in structured perceptual-state extraction (entity identity, position,
+presence, absence across panels or frames), not in downstream belief reasoning. We useperception
+operationally for this structured scene-state extraction, including cross-frame correspondence
+and event detection, andreasoningfor the mapping from scene states and access facts to belief
+attributions and answers (§3). The hypothesis is falsifiable. If the bottleneck is perceptual, giving
+the model the ground-truth scene description should bring performance back toward the text-only
+reasoning. If the bottleneck is conceptual, no scaffold will help, however accurate it is.
+To test this, we propose a five-condition dissociation protocol that holds the reasoning task constant
+while varying perceptual fidelity from visual only to text only with three intermediate scaffolds.
+We instantiate it on two stimulus regimes following prior conventions:abstract 2D panelsin the
+Heider-Simmel tradition [11], organized along the developmental cascade, andnaturalistic 3D game
+scenesfrom MuMA-ToM [ 29] and MindPower [39]. We quantify scaffold benefit with thePerceptual
+Contribution Ratio(PCR), a dose-response metric taking value 1 when a scaffold fully recovers the
+text-only ceiling and0when it does not help.
+The signature reproduces across both regimes and seven VLMs spanning three capability tiers.
+Ground-truth scaffolds substantially close the visual-to-text gap on every regime, matching or
+exceeding the text-only ceiling on abstract panels and MuMA-ToM and recovering 59% of it on
+MindPower. Automatic parsers, including frontier VLMs, fail. Stripping the explicit visibility
+and absence statements from the ground-truth scaffold by pattern matching retains most of the
+gain, ruling out that scaffolds simply hand the model the reasoning predicate. A finer content
+ladder attributes the largest aggregate increment to cross-frame event structure, and length-matched
+corrupted scaffolds recover less than half of the correct scaffold’s gain on aggregate, arguing against
+text volume as the explanation. The most common error in the visual-only condition isreality bias,
+which accounts for 60% of false-belief failures. Models report where an object actually is, not where
+an absent agent believes it is. This points to a perceptual front-end that fails to track which agents
+were present at each moment. When the front-end fails to recover the state of each entity in the scene,
+the downstream reasoning cannot make up for it. Under the evaluated protocol, structured visual
+scene-state extraction, rather than belief inference, is the dominant bottleneck for visual ToM.
+Contributions:
+• A five-condition dissociation protocol isolating perceptual from conceptual contributions to visual
+ToM failures, applied uniformly across abstract 2D and naturalistic 3D regimes.
+• The Perceptual Contribution Ratio: a dose-response metric tracing how much of the visual-to-text
+gap a scaffold of given fidelity closes, with negative values flagging misleading scaffolds and
+values above1indicating the combination exceeds the text-only ceiling.
+• Cross-regime evidence, across seven VLMs and roughly 159,000 API calls, that the visual ToM
+deficit is predominantly perceptual rather than conceptual, supported by a scaffold-content ladder,
+length-matched corruption controls, and the reality-bias error taxonomy.
+2
+
+===== PAGE 3 =====
+2 Related work
+Theory of Mind in language models:Whether LLMs possess Theory of Mind remains contested.
+Kosinski [16] reported GPT-4 passes false-belief tasks at six-year-old levels; Ullman [35] showed that
+trivial paraphrases cause catastrophic failures. Strachanet al. [ 33] found above-chance belief tracking
+with systematic biases absent in humans; Gandhiet al. [ 7] documented uneven performance across
+ToM dimensions; Shapiraet al. [28] introduced adversarial controls that degrade LLM ToM; Huet
+al. [13] argue existing evaluations conflate linguistic competence with mentalizing; Kimet al. [15]
+stress-tested ToM in information-asymmetric conversations. These studies are text-only. In the visual
+domain, Jinet al. [ 14] introduced MMToM-QA; Shiet al. [ 29] extended this with MuMA-ToM;
+Chenet al. [ 8] showed VLMs fail at visual perspective-taking despite intent recognition; Zhanget
+al. [39] documented a substantial human-VLM gap with MindPower. None measures whether the
+visual deficit is perceptual or conceptual in origin. Our protocol forces that distinction by holding
+the reasoning task constant and varying only the fidelity of perceptual input, applied uniformly across
+abstract 2D panels and naturalistic 3D game scenes.
+Cognitive benchmarks for VLMs:CogDevelop2K [ 18] evaluated 46 multimodal LLMs on 12
+cognitive sub-concepts organized by developmental milestones, finding models outperform on
+late-developing abstract reasoning relative to early-developing perceptual tasks. Tonget al. [34] traced
+systematic visual shortcomings to CLIP-based encoders; MotionBench [ 12] reported substantial
+gaps in fine-grained video motion understanding. These benchmarks score VLMs but treat the
+resulting accuracy as a single number; perceptual and inferential contributions remain entangled. Our
+scaffolding intervention dissociates the two and assigns the deficit to perception rather than reasoning.
+Developmental foundations:Spelke’s core knowledge theory [ 31, 32] posits domain-specific
+representational systems with a cascaded developmental trajectory: object individuation through
+spatiotemporal continuity [31] is a prerequisite for goal attribution [38, 9], which is a prerequisite
+for belief modeling [37, 5, 6]. Leslie [ 17] formalized this as a metarepresentational requirement;
+Onishi and Baillargeon [22] and Baillargeonet al. [ 4] demonstrated implicit false-belief sensitivity
+in infancy; Wellmanet al. [36] meta-analyzed 178 studies confirming robust developmental change.
+Apperly and Butterfill [2] proposed dual-systems distinguishing efficient inflexible belief tracking
+from flexible effortful mentalizing; Shuet al. [ 30] operationalized core psychological reasoning in
+AGENT. This literature establishes the cascade as a property of human development; it does not
+test whether VLMs are subject to a parallel dependency. Our protocol provides that test, and the
+dose-response signature places the bottleneck in the front-end of the cascade.
+Model-based ToM and structured intermediates:Several approaches assume access to structured
+state representations as input. ToMNet [26] trains a meta-learner over agent trajectories represented
+as state-action sequences; BIP-ALM [14] combines Bayesian inverse planning with structured scene
+representations to achieve strong belief inference. These systems take structured intermediates as
+given and evaluate the reasoning that follows. Our protocol takes the inverse view: it holds the
+inferential pathway constant and varies the fidelity of the structured intermediate that visual encoders
+attempt to produce, isolating the cost of extracting that intermediate from pixels.
+3 Benchmarking protocol
+We treat visual ToM as two pipelines in series: a perceptual front-end converting pixels into
+propositions, and an inferential back-end mapping them and a question to an answer. A single
+accuracy figure under visual input cannot tell us which is failing. Our protocol forces them apart
+by holding the inferential task constant while parametrically varying perceptual fidelity, from no
+scaffold to a complete ground-truth scene description. It applies identically to abstract 2D panels
+and naturalistic 3D game scenes.
+Operational definition:Perception is structured scene-state extraction: entity identity, position, and
+presence or absence across panels or frames, including the cross-frame correspondence and event
+detection that link them. Like object individuation and tracking through occlusion [31, 4], these com-
+petences carry no mental-state content. Reasoning maps such scene states and access facts to belief
+attributions and answers. Cross-frame event linking is an intermediate representation; we assign it to
+perception by this definition rather than assume the boundary, and no scaffold belowBf states a belief.
+3
+
+===== PAGE 4 =====
+Figure 2:Representative abstract 2D probes across the developmental cascade, one template
+per stage.(a)Stage 1 object tracking (OCCLUSION_CONSISTENT): a cyan circle moves rightward,
+becomes hidden behind a gray occluder, and reappears.Question:“Is the final reappearance position
+consistent with the earlier direction of motion, yes or no?” (correct: yes).(b)Stage 2 goal attribution
+(WALL_REMOVED): a blue agent must reach a green goal with no obstacle present.Question:“With
+no obstacle present, which path would a goal-directed character choose, straight or curved?” (correct:
+straight).(c)Stage 3 false belief (KNOWLEDGE_BELIEF): the teal character sees a yellow object
+in the left container and exits; the red character moves it to the right container; the teal character
+returns.Question:where the teal character thinks the object is (correct: left). All stimuli rendered
+programmatically with no embedded text; full catalog in §H.
+3.1 The five-condition dissociation
+Each probe is evaluated under five conditions, sampling the visual-to-text fidelity continuum. A
+and C anchor the endpoints; the three B conditions sit between, each adding a textual scaffold of
+increasing fidelity to the image.
+A Visual only:Multi-panel image (abstract) or sampled video frames (naturalistic) with the
+question; no scene description (verbatim prompts in §H). Measures how well the model’s own
+front-end extracts the scene state the question requires.
+Ba Image with automatic-parser scaffold:Visual input plus a scaffold from a parser with no
+ground-truth access. Abstract: a hand-engineered pixel pipeline using flood-fill blob detection, color
+matching, and inter-panel differencing (§A.2). Naturalistic: a frontier VLM (GPT-4o; additionally
+Claude Sonnet 4 on MindPower), prompted to produce panel-by-panel entity narrations with no ToM
+interpretation. Both are imperfect by construction; Ba asks whether a realistic front-end recovers
+the scene structure belief attribution requires.
+Bp Image with perceptual-grade scaffold:Visual input plus a scaffold correct by construction but
+deliberately omitting visibility and absence inference: it names entities, positions, and observable
+events, may state that an agent witnesses an event, but never states that one agent did not observe
+what another did. This isolates how much scaffold benefit comes from perceptual content rather than
+visibility cues. Abstract: a panel-by-panel entity narration generated programmatically from the scene
+generator’s state. MindPower: the dataset’s scene description (script-derived for 427 of 456 Virtual-
+Home scenarios, human-written otherwise), which contains observable scene state but not the belief,
+desire, intention, decision, or action layers used in scoring, and occasionally contains state-comparison
+phrasing (e.g. “the box is closed again”). Undefined for MuMA-ToM, whose annotations yield a
+single scaffold; it matches no visibility pattern (below), so thereB f is close to perceptual-grade.
+Bf Image with full ground-truth scaffold:Visual input plus the most complete reference scaffold
+per regime. Abstract: Bp plus explicit visibility and absence statements (“agent X was not in the
+scene when the object was moved”); for the second-order template, the scaffold also states the
+resulting first-order belief. MuMA-ToM: ground-truth entity identities, locations, and actions; none
+of the 900 logged prompts matches the visibility patterns of §G.2 (§G.9). MindPower: the full human
+reference chain across all six layers, shared across all scored layers of a scenario; on this regime, Bf
+functions as a full-information oracle upper bound rather than a leakage-controlled perceptual ceiling.
+4
+
+===== PAGE 5 =====
+Figure 3:Representative frames from the naturalistic multi-agent benchmarks.Top:MuMA-
+ToM [29] household videos with human-rendered agents; questions probeBELIEF,BELIEF_OF_GOAL,
+SOCIAL_GOAL.(a)–(d)kitchen, kitchen-adjacent, bedroom-to-living, and dimly lit living-room
+layouts.Bottom:MindPower [ 39] ThreeDWorld scenarios; the model acts as a robot helper inferring
+the human’s implicit goal.(e),(g)obstacle removal (pillows on a bed; a wheelchair user blocked by a
+fire hydrant).(f),(h)missing tool (bread without a utensil; a low-battery MacBook without its cable).
+Evaluations use multi-frame inputs (8 frames per MuMA-ToM video, storyboards of up to 12 frames
+per MindPower scenario).
+C Text only:The scene conveyed as text, with no image: on abstract panels, a short narration
+of the same scene, including who witnessed each event (§H); on MuMA-ToM, the Bf text; on
+MindPower, the Bp description. Measures the reasoning ceiling when no visual processing is
+required;Acc(C)−Acc(A)is the visual-to-text deficit that scaffolds attempt to close.
+Why these five conditions:Each transition adds one interpretable increment of fidelity while
+question and image are held fixed: A →B a adds what a realistic automatic front-end produces;
+Ba →B p makes the content correct while withholding visibility and absence; Bp →B f adds
+visibility and absence; Bf →C removes the image. The endpoints are the settings prior work
+measures; the intermediate rungs separate front-end quality (Ba vs. Bp) from epistemic content (Bp
+vs. Bf ) and from the image ( Bf vs. C). Accuracy therefore traces a dose-response along a single
+axis, the fidelity of perceptual input reaching the inferential pathway, which PCR (§3.3) reads rung
+by rung; §4 refines the ladder belowB p.
+3.2 Stimulus regimes
+The two regimes differ on every perceptual dimension.Abstract 2D panelspresent ToM structure
+in stripped-down form: multi-panel images of geometric shapes in the Heider-Simmel tradition [11],
+with zero embedded text.Naturalistic 3D game scenesmove to multi-agent household activity
+rendered in 3D game environments, drawing on MuMA-ToM [29] and MindPower [39]. The two
+stress-test the perceptual-bottleneck account from opposite directions: abstract asks whether the
+bottleneck appears even when stimuli are deliberately easy to parse; naturalistic asks whether the
+same dose-response reproduces under realistic clutter, occlusion, and multi-frame dynamics.
+Abstract 2D panels:Following the developmental cascade in human cognitive develop-
+ment [31, 6, 36], the regime spans three stages, each requiring the previous as computational input
+(full diagram in §C). Stage 1 (Object Tracking, 6 templates, 300 probes) tests spatiotemporal
+individuation: occlusion continuity, trajectory-violation detection, count maintenance, permanence,
+color-change [31]. Stage 2 (Goal Attribution, 4 templates, 200 probes) tests inference of goals from
+motion, corresponding to 6–12 month infant capacities [38, 9]: target inference, detour reasoning,
+non-goal discrimination, efficient action prediction. Stage 3 (False Belief, 10 templates, 500 probes)
+tests the canonical ToM capacity [ 37, 5, 36]: Sally-Anne search and belief reports, reality-belief
+dissociation, knowledge access, unexpected contents, two-room transfers, perspective divergence, and
+second-order belief. Each template gets 50 seeded randomized variants for 1,000 probes total (gener-
+ation and seed formula in §A.1). We follow construction conventions of prior work and do not claim
+the panel set as a contribution; representative probes in Figure 2; full template descriptions in §C.
+5
+
+===== PAGE 6 =====
+Table 1:Aggregate accuracy (%) by regime
+and condition, 7-model means. (b) Pooled over
+retained responses per type; overall in Table 4. (c)
+Weighted over 36 TDW + 456 VirtualHome sce-
+narios; Ba averages two parsers (Table 5).Bold:
+best per row.
+Stage / Type / Layer A Ba Bp Bf C
+(a) Abstract 2D panels: developmental stages
+1: Object Tracking 72.8 71.596.493.4 89.4
+2: Goal Attribution 90.9 89.499.298.9 93.1
+3: False Belief 73.9 75.7 88.898.494.5
+(b) Naturalistic MuMA-ToM: by question type
+BELIEF58.8 64.9 –74.767.7
+BELIEF_OF_GOAL41.6 44.4 –52.950.6
+SOCIAL_GOAL37.6 37.0 –53.648.8
+(c) Naturalistic MindPower: by reasoning layer
+PERCEPTION19.3 21.6 26.8 24.847.4
+BELIEF23.4 22.7 28.8 35.535.9
+DESIRE21.4 20.0 24.929.028.7
+INTENTION21.4 19.2 25.6 28.731.3
+DECISION23.3 21.2 28.1 31.336.2
+ACTION6.1 4.9 10.2 14.418.7
+Overall19.1 18.3 24.1 27.333.0
+Table 2:PCR by capability tier(95% bootstrap
+CIs). MuMA-ToM: question-weighted. Mind-
+Power: scenario-weighted layer-mean over both
+environments.Bold: best per block.
+Tier PCRa ↑ PCRp ↑ PCRf ↑
+(a) Abstract 2D panels, Stage 3
+Frontier 0.02 [-.12, .15] 0.96 [.89, 1.04]1.22[1.14, 1.31]
+Mid-scale -1.10 [-1.45, -.81] 0.27 [.12, .40]1.01[.99, 1.04]
+Small-scale 0.82 [.73, .92] 0.77 [.67, .87]1.26[1.18, 1.34]
+(b) Naturalistic MuMA-ToM
+Frontier 0.25 [.10, .41] –1.81[1.61, 2.04]
+Mid-scale 0.04 [-.18, .27] –1.57[1.32, 1.86]
+Small-scale 0.53 [.38, .69] –0.66[.50, .83]
+(c) Naturalistic MindPower
+Frontier -0.06 [-.08, -.05] 0.39 [.37, .42]0.49[.45, .53]
+Mid-scale -0.12 [-.15, -.09] 0.42 [.38, .46]0.86[.80, .93]
+Small-scale -0.02 [-.04, .00] 0.23 [.20, .26]0.51[.47, .56]
+Naturalistic 3D game scenes: MuMA-ToM[29] provides 225 sampled household-activity videos
+with multiple human-rendered agents performing belief-relevant actions, yielding 900 multiple-choice
+questions across three types:BELIEF(202),BELIEF_OF_GOAL(496), andSOCIAL_GOAL(202).
+The types are imbalanced; per-model overall accuracy is question-weighted across the 900 items,
+so it differs from the unweighted mean of per-type aggregates.MindPower[ 39] provides 492
+photorealistic embodied scenarios (36 ThreeDWorld, 456 VirtualHome) with gold annotations across
+six layers: perception, belief, desire, intention, decision, action. Each layer is scored as the average of
+BERTScore-F1 and sentence-transformer cosine similarity against the gold reference. MuMA-ToM
+inputs are eight separate frames per video; MindPower inputs are one storyboard image of up to
+12 frames per scenario. Both datasets increase perceptual difficulty along every realistic axis (clutter,
+occlusion, multi-agent dynamics, multi-frame integration, lighting), inverting the abstract regime.
+Representative frames in Figure 3.
+3.3 The Perceptual Contribution Ratio
+The five conditions yield five accuracy numbers per model and benchmark. We collapse them to
+a single ratio: of the visual-to-text deficit Acc(C)−Acc(A) , what fraction does a scaffold of given
+fidelity recover?
+A VLM processes a stimulus I through perceptual extraction π, producing internal propositions,
+followed by reasoning ρ mapping propositions and a question q to an answer: fvis(I,q) =ρ(π(I),q) .
+In text-only mode, ftxt(T, q) =ρ(τ(T), q) , where τ encodes a narration T into the same
+propositional space. A scaffold sx at fidelity x augments visual input via token-level fusion:
+fscaffold(I,s x,q) =ρ(π(I)⊕τ(s x),q). Treating ρ as shared across modalities is a simplification; the
+protocol tests its functional consequence rather than its mechanistic identity.
+Definition 1(Perceptual Contribution Ratio).
+PCRx = Acc(Bx)−Acc(A)Acc(C)−Acc(A) ,(1)
+whereAis visual-only,B x is image-with-scaffold at fidelityx∈ {a,p,f}, andCis text-only.
+The triplet (PCRa,PCRp,PCRf ) traces a dose-response curve. PCRx = 1 indicates the scaffold
+closes the gap entirely (purely perceptual deficit); PCRx = 0indicates no benefit (purely conceptual
+deficit); intermediate values give the fraction of the deficit perceptual repair recovers; negative values
+6
+
+===== PAGE 7 =====
+Table 3:Per-model accuracy (%) on abstract
+2D Stage 3 (False Belief). n=500 probes per
+model. Models are separated by tier (see §3.4).
+Bold: best per row.
+Model A Ba Bp Bf C
+GPT-4o [23] 76.4 86.6 90.299.291.6
+Gemini 2.5 Pro [10] 71.8 68.4 90.4 92.695.4
+Claude Sonnet 4 [1] 78.8 73.2 97.6100.093.2
+Qwen2.5-VL-72B [3] 79.2 57.0 90.0100.099.4
+Llama 4 Maverick [20] 87.0 72.8 85.0 99.8100.0
+GPT-4.1-mini [24] 70.2 80.8 80.2100.094.8
+Ministral-8B [21] 53.6 91.2 88.497.487.0
+Mean73.9 75.7 88.898.494.5
+Table 4:Per-model accuracy (%) on MuMA-
+ToM( n=900 probes/model; Bp undefined). Un-
+parsed responses excluded; Mean averages the
+per-model accuracies.Bold: best per row.
+Model A Ba Bf C
+GPT-4o [23] 45.8 47.6 52.456.4
+Gemini 2.5 Pro [10] 62.3 59.184.265.1
+Claude Sonnet 4 [1] 33.8 43.364.952.8
+Qwen2.5-VL-72B [3] 48.1 45.158.155.8
+Llama 4 Maverick [20] 44.2 47.855.750.2
+GPT-4.1-mini [24] 41.1 46.9 51.455.8
+Ministral-8B [21] 37.4 41.9 39.942.1
+Mean44.7 47.458.154.0
+flag misleading scaffolds; values above 1 indicate the scaffold-plus-image combination matches
+or exceeds the text-only ceiling (§4). The metric is undefined when Acc(C) = Acc(A); the gaps
+observed throughout this paper make that case moot.
+This functional form is not arbitrary. PCR is the unique metric on triples (Acc(A),Acc(Bx),Acc(C))
+with Acc(C)>Acc(A) that satisfies endpoint calibration, invariance to positive affine reparame-
+terizations, and affine dependence on the scaffolded accuracy (proof in §D.4). Any alternative form
+must abandon at least one assumption.
+3.4 Models and evaluation
+Model lineup:We evaluate seven VLMs across three tiers reflecting parameter count and provider
+positioning.Frontier(top-line commercial, >100B): GPT-4o (Nov. 2024) [23], Gemini 2.5 Pro
+Preview [10], Claude Sonnet 4 [1].Mid-scale(17B–72B): Qwen2.5-VL-72B-Instruct [ 3], Llama
+4 Maverick [20].Small-scale(sub-10B or mini): GPT-4.1-mini [24], Ministral 3 8B [21]. All seven
+are evaluated on both regimes. Models are accessed through the OpenRouter API with deterministic
+decoding (temperature 0, max 200 output tokens, single-turn); request parameters and retry logic
+in §A.3, exact model identifiers in §F, and verbatim prompts for every condition in §H.
+Answer grading:Responses are normalized (lowercased, whitespace-collapsed) before deterministic
+grading with no partial credit. For yes/no, the response must begin with the expected token; for numer-
+ical, the expected digit must appear in the first four characters; for directional, the response must con-
+tain any expected alias, including container color names, where unambiguous; for the reality-versus-
+belief template, the response is split at “belief” with the reality answer before and belief answer after.
+Identical across all conditions and models; alias lists and split-answer algorithms in §A.4. MuMA-
+ToM uses the multiple-choice grading from [29]; MindPower uses the per-layer scoring from [39].
+Statistical methodology:Confidence intervals are computed by probe-level bootstrap with 10,000
+iterations, resampling probe indices with replacement and reporting the 2.5th and 97.5th percentiles.
+PCR CIs use the same bootstrap, recomputing the ratio per iteration. Pairwise condition comparisons
+use McNemar’s test on matched (model, probe) pairs with Bonferroni correction across the 12
+protocol comparisons (αBonf = 0.0042); for abstract Stage 3, this yields n= 7×500 = 3,500paired
+observations per comparison. The ladder and corruption controls (§4) use the same test and threshold
+against the same A. Full detail in §D.
+Scale:The protocol totals roughly 159,000 API calls: ∼111,000 on the abstract regime (including
+the content ladder, corruption controls, and ablations on Bvlm, Bvis−stripped, chain-of-thought, and
+self-scaffold reported in §G) and ∼48,000 on the naturalistic regime. Parser-failure responses are
+excluded from totals.
+4 Results
+The protocol described in §3 was applied across the seven-model lineup on both stimulus
+regimes, totaling roughly 159,000 API calls. We organize the findings around five claims that the
+7
+
+===== PAGE 8 =====
+Table 5:Per-model layer-mean accuracy (%) on MindPower.BGa and BCa : GPT-4o and Claude
+Sonnet 4 as automatic parsers. Bf : oracle scaffold with the human reference chain across all six
+layers (§3.1). Tiers: F/M/S = Frontier/Mid-scale/Small-scale.Bold: best per row within each
+environment.
+ThreeDWorld (36 scenarios) VirtualHome (456 scenarios)
+Model Tier A BGa BCa Bp Bf C A BGa BCa Bp Bf C
+GPT-4o [23] F 31.6 30.7 26.9 45.154.9 54.919.3 17.1 16.9 23.531.729.5
+Gemini 2.5 Pro [10] F 35.7 34.6 33.5 41.9 46.457.119.4 18.4 18.3 24.5 22.834.2
+Claude Sonnet 4 [1] F 25.5 31.3 26.3 45.4 41.655.818.3 18.5 18.9 25.8 23.037.5
+Qwen2.5-VL-72B [3] M 28.8 29.2 26.1 49.0 44.549.119.4 18.2 17.3 23.4 26.831.1
+Llama 4 Maverick [20] M 24.7 28.8 25.3 44.551.951.2 18.4 17.2 16.7 21.729.328.1
+GPT-4.1-mini [24] S 32.6 31.5 29.9 45.2 45.156.619.8 18.8 18.8 23.4 25.535.3
+Ministral-8B [21] S 20.2 23.3 20.4 27.7 35.938.214.4 14.6 14.9 15.9 21.625.2
+Mean28.4 29.9 26.9 42.7 45.851.918.4 17.5 17.4 22.6 25.831.5
+dose-response signature licenses, followed by a robustness check. Headline numbers appear in
+Table 1, per-tier PCR in Table 2, and per-model breakdowns in Tables 3, 4, and 5.
+Ground-truth scaffolds substantially close the visual-to-text gap on every regime:On abstract
+2D Stage 3, aggregate visual-only accuracy is 73.9% and text-only is 94.5%, a gap of 20.6 pp. The
+full ground-truth scaffold Bf closes this gap entirely, reaching 98.4%, with PCRf = 1.19 (95%
+CI [1.09, 1.30]). The Bf -plus-image condition matches or exceeds the text-only ceiling for every
+tier (Table 2a): frontier 1.22, mid-scale 1.01, small-scale 1.26. Naturalistic MuMA-ToM shows
+the same pattern at a larger magnitude: aggregate PCRf = 1.44, frontier 1.81, mid-scale 1.57,
+small-scale 0.66 (Table 2b). These scaffolds match none of the visibility patterns of §G.2 (§G.9),
+so content without explicit visibility statements closes the gap. Because Bf and C also differ in their
+text on abstract panels, we do not interpret PCR>1 further. On MindPower, the picture changes
+quantitatively but not qualitatively: Bf recovers 59% of a 13.9 pp visual-to-text gap, with mid-scale
+strongest at PCRf = 0.86. On this regime, Bf is an oracle full-information scaffold (§3.1); the
+leakage-controlled Bp recovers 39% of the gap on the frontier and 42% on mid-scale (Table 2c).
+Across all three regimes, every PCRf is positive and statistically distinct from zero (Table 2 CIs;
+McNemarp Bonf <10 −4 on the binary-scored regimes).
+Automatic parsers fail across regimes:Where ground-truth scaffolds rescue performance,
+automatic-parser scaffolds do not (Table 2, PCRa column). On abstract 2D Stage 3, the aggregate
+PCRa is 0.09, with the mid-scale tier at −1.10: the parser actively misleads. The small-scale tier is
+the exception (PCRa = 0.82). The hand-engineered abstract parser correctly recovers entity identities
+and positions on 99.4% of probes (§B.2), so the failure is not at low-level extraction. The deficit
+is that parser output, even when correct on entity-level facts, lacks the visibility and presence-absence
+structure false-belief requires. On MindPower we ran two independent parsers: GPT-4o-as-parser
+yields aggregate PCRa =−0.06 across tiers and Claude-as-parser yields −0.08 (scenario-weighted
+average of environment PCRs; Table 5). Failure consistency across two frontier parsers, in addition
+to the hand-engineered parser on abstract panels, is the diagnostic: the bottleneck is not bridged
+by current visual encoders in zero-shot scene-describer roles.
+The dose-response is monotonic in scaffold fidelity:Where all three scaffold conditions are defined
+(abstract 2D Stage 3 and MindPower), accuracy increases monotonically from A through Ba through
+Bp through Bf , the only exception being Ba, which falls slightly below A on MindPower for the rea-
+sons above. Abstract Stage 3: A= 73.9→B a = 75.7→Bp = 88.8→Bf = 98.4. MindPower (overall
+layer-mean): A= 19.1→B a = 18.3→Bp = 24.1→Bf = 27.3. The ordering rules out non-perceptual
+explanations: if scaffolds helped through token-count or format-priming, Ba would close more of the
+gap and Bp would not be reliably below Bf . Excluding the automatic parser, the ordering A < Bp <
+Bf holds per model for6 of 7 models on abstract Stage 3 (Table 3); the exception is Llama 4 Maverick,
+whose Bp (85.0%) falls below its high visual-only baseline (87.0%). A stripped variant Bvis−stripped
+removes the explicit visibility and absence statements that match nine regex patterns from Bf (§G.2;
+8.9% of characters). On the six models evaluated, accuracy is 90.0% and PCRvis−stripped = 0.69,
+recovering most of the gap. The one outlier is Gemini 2.5 Pro (54.4%, against 88.0% or above for
+every other model), indicating model-specific reliance on explicit absence cues (Table S4).
+8
+
+===== PAGE 9 =====
+Table 6:Scaffold-content ladder and corrup-
+tion controlson Stage 3 (7 models× 500 probes).
+No rung below Bf states a belief. †Six models;
+∆vs. their A (77.2).
+Condition Content added Acc∆vs. A
+A none 73.9 –
+Bidentity per-panel entity lists 74.0 (+0.1)
+Bstatic + per-panel positions 76.7 (+2.8)
+Bp + cross-frame events, linkage 88.8 (+14.9)
+Bvis-stripped Bf minus visibility statements 90.0 † (+12.8)†
+Bf + visibility and absence98.4(+24.5)
+C text narration, no image 94.5 (+20.6)
+Length-matched corruptions ofB p
+Dmismatch another variant’s scaffold 74.7 (+0.8)
+Dnoise 30% of names replaced 79.5 (+5.6)
+Dshuffled panel sentences reordered 80.6 (+6.7)
+Table 7:Prompt sensitivityon Stage 3. A: 7
+models (paraphrases on 200 probes each); C, Bf :
+6 models. Last row: distractor (A), adversarial
+(C,B f ). (b)∆vs. A on the same models.
+Variant A C Bf
+(a) Prompt paraphrase
+Original 73.9 95.7 98.6
+Restructured 70.1 (−3.8) 95.2 (−0.5) 93.9 (−4.7)
+V ocabulary 71.9 (−2.0) 94.8 (−0.9) 97.1 (−1.5)
+Distractor / adversarial 69.9 (−4.0) 97.2 (+1.5) 97.6 (−1.0)
+(b) Prompting strategy (visual only)
+Chain-of-thought 76.6 (−1.7) – –
+Self-scaffold 58.5 (−18.7) – –
+(a)SALLY_ANNE_REALITY, GPT-4o.Where is the pink object
+actually located in the final panel?(correct: right)
+A “left”✗ Bp “right”✓ Bf “right”✓ C “right”✓
+Template accuracy: A 74.9,Bp 98.9,B f 99.4, C 100.0.
+(b)TWO_ROOMS, GPT-4o. C red starts in the left room with the cyan object. blue is
+in the right room. red carries the object into the right room while blue is watching. blue
+then leaves. While blue is gone, red places the object in the right brown container. blue
+returns later. Where does the blue character think the cyan object is, left or right?
+(correct: right) Output: “left”✗
+Template accuracy: A 56.0,Bp 65.7,B f 98.9, C 78.6.
+Figure 4:Qualitative examples with verbatim outputs. (a)Visual-only failure recovered by
+scaffolds: on a reality question, the model reports the pre-transfer location.(b)Failure at the text-only
+ceiling: the returning agent saw the object carried into the right room, yet the model applies “absent
+agent, therefore old location”. Template accuracy over 350 trials; prompts in §H.
+The recovery tracks structured event content, not text volume:Two rungs below Bp separate
+perceptual repair from offloaded state tracking (Table 6; §G.6): Bidentity lists the entities in each
+panel without positions, and Bstatic adds per-panel positions with no events, linkage, or visibility
+statements. On aggregate these add little (+0.1 pp, p=.84 ; +2.8 pp, p=.0033 ), the largest increment
+(+12.1 pp to Bp) comes from cross-frame event structure, which carries no mental-state content,
+and Bf , which adds observable access facts, contributes the remaining 9.6 pp. Per model the picture
+is heterogeneous: static positions alone recover most or all of the Bp gain for GPT-4o, GPT-4.1-mini,
+and Ministral-8B, but hurt Claude Sonnet 4, Llama 4 Maverick, and Qwen2.5-VL-72B, whose
+Bstatic failures remain reality bias in 47 of 50 inspected cases. Three length-matched corruptions
+of Bp (Table 6; §G.7) recover less than half of the 14.9 pp that Bp adds on aggregate (p≈4×10 −63
+for Bp). Dmismatch, the strongest corruption, gives no significant gain (p=.38 ); the two weaker ones
+give small but significant gains (+5.6 and +6.7 pp, both p <10−8), much of it from Ministral-8B.
+Per model, Gemini 2.5 Pro falls below A under every corruption and Claude Sonnet 4 retains little of
+the benefit, whereas GPT-4o retains nearly all of it. Nor does text volume: the VLM-parser scaffolds
+are the longest (mean 343 tokens) yet do not improve on A (§G.8); whether the benefit requires
+image-bound content remains open (§6).
+The dominant visual-only error mode is reality bias:We categorized all915 visual-only errors on
+abstract Stage 3 (7 models ×500 probes) using a deterministic rule (§A.5). An error is areality-bias
+error if the model reports the object’s veridical current location rather than the location consistent
+with the absent agent’s belief. Reality-bias errors account for 549 of 915 visual-only errors (60.0%);
+the remaining 40% are uncategorized. The reality-bias share is invariant across tiers within 5
+pp. The bias is not a failure of belief reasoning in the abstract: under the same probes, text-only
+accuracy is94.5%. It appears only when the question is conveyed visually and disappears when the
+visibility-and-absence content is provided in the scaffold. The mechanism is a perceptual front-end
+that encodeswhatan object is andwhereit currently is but notwho was present when it moved,
+leaving the inferential pathway with insufficient state to dissociate reality from belief. Figure 4 shows
+9
+
+===== PAGE 10 =====
+a visual-only failure recovered by scaffolds and a residual failure at the text-only ceiling; text-side
+errors exist, and our claim concerns the20.6pp gap, not perfect text-side reasoning.
+The findings are robust to prompting choices:Visual-only accuracy stays within 4.0 pp of the
+original across three question paraphrases, and all six paraphrases of C and Bf , including an
+adversarial insertion, exceed 93% (Table 7). Prompting for more inference does not substitute for
+supplied scene state: chain-of-thought changes visual-only accuracy by −1.7 pp on average and
+self-scaffolding by −18.7 pp. Chain-of-thought helps Claude Sonnet 4 ( 78.8→90.6 ) but not past
+its own Bp (97.6): perception and reasoning are intertwined in implementation, and our claim is
+functional, as the deficit closes when scene state is supplied, not when inference is prompted (§G.4).
+5 Discussion
+Scene-state extraction is the dominant bottleneck:The findings converge on a single picture. When
+the scene is given in pixels, frontier VLMs fail false-belief tasks by margins commonly attributed to a
+missing belief-reasoning capacity. When the same problem is given in text, the same models succeed.
+Given pixels plus the structured perceptual content the front-end should have produced, performance
+reaches or exceeds the text-only ceiling on abstract panels and MuMA-ToM, and recovers part of
+it on MindPower. Under the evaluated protocol, the deficit lies predominantly not in the inferential
+pathway that operates on scene representations, which the text-only ceiling shows is largely intact,
+but in the front-end that converts pixels to scene representations. Reality bias names the failure:
+the front-end encodes object identity and current location but not who was present at each moment,
+leaving the inferential pathway with the wrong input.
+Reconciliation with prior accounts:Recent cognitive or representational diagnoses of visual ToM
+failures [19, 8, 34, 13] target single-image or static tasks with spatially localized evidence, so they
+can coexist with our claim. The protocol distinguishes the two diagnoses per task: a dose-response
+with PCRp or PCRf near 1 localizes the deficit to perceptual extraction, and a flat one would
+localize it to inference. For sequential multi-panel and multi-frame ToM, the signature consistently
+localizes to perception, and it supplies the measurement that model-based approaches [26, 14] skip
+by taking scene structure as given (§E).
+Architectural implications:If the bottleneck is in front-end scene-state extraction rather than belief
+inference, the first priority is better perceptual representations rather than new reasoning modules.
+The specific competences current encoders fail to produce are object-level entity tracking with
+persistent identity across frames, and presence-absence registers indexed to entities at each frame. We
+predict that VLM architectures with explicit object slots, cross-frame correspondence, and visibility
+tracking, pretrained for per-entity state extraction rather than global scene captioning, would close
+most of the visual-to-text gap on existing ToM benchmarks without belief-specific training objectives.
+6 Limitations
+We evaluate two stimulus regimes and seven black-box API models; in-the-wild video and
+open-weight object-centric models are untested, and the claims are functional, not mechanistic. The
+perception/reasoning boundary follows our operational definition (§3): cross-frame event linking is
+an intermediate representation, and a definition assigning it to reasoning would move that increment
+accordingly. The corruption controls are model-dependent and partly weak by construction, and
+Dmismatch may net useful template cues against misleading scene content, so they argue against text
+volume without settling whether the benefit requires image-bound content; jointly varying image-text
+alignment is a natural next test (§F).
+7 Conclusion
+We proposed a five-condition dissociation protocol that holds the inferential task constant while
+varying perceptual fidelity. Across seven VLMs and roughly 159,000 API calls, the visual ToM
+deficit is predominantly perceptual: ground-truth scaffolds substantially close the visual-to-text gap
+on every regime, automatic parsers fail in aggregate, the recovery tracks cross-frame event structure,
+and the dominant visual-only error is reality bias. Under the evaluated protocol, structured visual
+scene-state extraction, rather than belief inference, is the dominant bottleneck for visual ToM.
+10
+
+===== PAGE 11 =====
+Acknowledgements
+Mohamed Rayan Barhdadi has been supported by the Student Research Experience Grant
+(SREG-ECEN-2026) from the Office of Research and Graduate Studies, TAMU-Q. Syed Talal Wasim
+has been supported by the 2026 Google PhD Fellowship in Machine Perception and, together with
+Juergen Gall, by the ERC Consolidator Grant FORHUE (101044724). Juergen Gall has additionally
+been supported by the Federal Ministry of Research, Technology and Space (BMFTR) under grant
+no. 16IS22094A WEST-AI.
+References
+[1] Anthropic. Claude Sonnet 4, 2025.https://www.anthropic.com/claude.
+[2] Ian A Apperly and Stephen A Butterfill. Do humans have two systems to track beliefs and
+belief-like states?Psychological Review, 116(4):953–970, 2009.
+[3] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng
+Wang, Shijie Wang, Jun Tang, Humen Zhong, Yuanzhi Zhu, Mingkun Yang, Zhaohai Li,
+Jianqiang Wan, Pengfei Wang, Wei Ding, Zheren Fu, Yiheng Xu, Jiabo Ye, Xi Zhang, Tianbao
+Xie, Zesen Cheng, Hang Zhang, Zhibo Yang, Haiyang Xu, Junyang Lin, et al. Qwen2.5-VL
+technical report.arXiv preprint arXiv:2502.13923, 2025.
+[4] Renée Baillargeon, Rose M Scott, and Zijing He. False-belief understanding in infants.Trends
+in Cognitive Sciences, 14(3):110–118, 2010.
+[5] Simon Baron-Cohen, Alan M Leslie, and Uta Frith. Does the autistic child have a “theory of
+mind”?Cognition, 21(1):37–46, 1985.
+[6] Susan Carey.The Origin of Concepts. Oxford University Press, 2009.
+[7] Kanishk Gandhi, Jan-Philipp Fränken, Tobias Gerstenberg, and Noah D Goodman. Under-
+standing social reasoning in language models with language models. InAdvances in Neural
+Information Processing Systems, volume 37, 2023.
+[8] Qingying Gao, Yijiang Li, Haiyun Lyu, Haoran Sun, Dezhi Luo, and Hokin Deng. Vision
+language models see what you want but not what you see.arXiv preprint arXiv:2410.00324,
+2024. ICLR 2025 Workshop on Bidirectional Human-AI Alignment (BiAlign).
+[9] György Gergely, Zoltán Nádasdy, Gergely Csibra, and Szilvia Bíró. Taking the intentional
+stance at 12 months of age.Cognition, 56(2):165–193, 1995.
+[10] Google DeepMind. Gemini 2.5 Pro, 2025. https://deepmind.google/technologies/
+gemini/.
+[11] Fritz Heider and Marianne Simmel. An experimental study of apparent behavior.The American
+Journal of Psychology, 57(2):243–259, 1944.
+[12] Wenyi Hong, Yean Cheng, Zhuoyi Yang, Weihan Wang, Lefan Wang, Xiaotao Gu, Shiyu
+Huang, Yuxiao Dong, and Jie Tang. Motionbench: Benchmarking and improving fine-grained
+video motion understanding for vision language models. InProceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), pages 8450–8460, 2025.
+[13] Jennifer Hu, Felipe Sosa, and Tomer Ullman. Re-evaluating theory of mind evaluation in large
+language models.Philosophical Transactions of the Royal Society B, 2025.
+[14] Chuanyang Jin, Yutong Wu, Jing Cao, Jiannan Xiang, Yen-Ling Kuo, Zhiting Hu, Tomer
+Ullman, Antonio Torralba, Joshua B Tenenbaum, and Tianmin Shu. MMToM-QA: Multimodal
+theory of mind question answering.arXiv preprint arXiv:2401.08743, 2024.
+[15] Hyunwoo Kim, Melanie Sclar, Xuhui Zhou, Ronan Le Bras, Gunhee Kim, Yejin Choi, and
+Maarten Sap. FANToM: A benchmark for stress-testing machine theory of mind in interactions.
+InProceedings of the 2023 Conference on Empirical Methods in Natural Language Processing
+(EMNLP), pages 14397–14413, 2023.
+11
+
+===== PAGE 12 =====
+[16] Michal Kosinski. Evaluating large language models in theory of mind tasks.Proceedings of
+the National Academy of Sciences, 121(45), 2024.
+[17] Alan M Leslie. Pretense and representation: The origins of “theory of mind”.Psychological
+Review, 94(4):412–426, 1987.
+[18] Yijiang Li, Qingying Gao, Haoran Sun, Haiyun Lyu, Dezhi Luo, and Hokin Deng. Cogde-
+velop2k: Reversed cognitive development in multimodal large language models.arXiv preprint
+arXiv:2410.10855, 2024.
+[19] Zhining Liu, Ziyi Chen, Hui Liu, Chen Luo, Xianfeng Tang, Suhang Wang, Jingying Zeng,
+Zhenwei Dai, Zhan Shi, Tianxin Wei, Hanqing Lu, Benoit Dumoulin, and Hanghang Tong.
+Seeing but not believing: Probing the disconnect between visual attention and answer
+correctness in VLMs. InInternational Conference on Learning Representations (ICLR), 2026.
+[20] Meta AI. Llama 4, 2025.https://ai.meta.com/llama/.
+[21] Mistral AI. Ministral 3 8B (2512), 2025. Released December 2, 2025. https:
+//openrouter.ai/mistralai/ministral-8b-2512.
+[22] Kristine H Onishi and Renée Baillargeon. Do 15-month-old infants understand false beliefs?
+Science, 308(5719):255–258, 2005.
+[23] OpenAI. GPT-4o, 2024.https://openai.com/gpt-4o.
+[24] OpenAI. GPT-4.1 mini, 2025.https://openai.com/index/gpt-4-1/.
+[25] David Premack and Guy Woodruff. Does the chimpanzee have a theory of mind?Behavioral
+and Brain Sciences, 1(4):515–526, 1978.
+[26] Neil Rabinowitz, Frank Perbet, Francis Song, Chiyuan Zhang, S. M. Ali Eslami, and Matthew
+Botvinick. Machine theory of mind. InProceedings of the International Conference on Machine
+Learning (ICML), pages 4218–4227, 2018.
+[27] Maarten Sap, Ronan LeBras, Daniel Fried, and Yejin Choi. Neural theory-of-mind? On the
+limits of social intelligence in large LMs.arXiv preprint arXiv:2210.13312, 2022.
+[28] Natalie Shapira, Mosh Levy, Seyed Hossein Alavi, Xuhui Zhou, Yejin Choi, Yoav Goldberg,
+Maarten Sap, and Vered Shwartz. Clever hans or neural theory of mind? stress testing social
+reasoning in large language models.arXiv preprint arXiv:2305.14763, 2024.
+[29] Haojun Shi, Suyu Ye, Xinyu Fang, Chuanyang Jin, Leyla Isik, Yen-Ling Kuo, and Tianmin Shu.
+MuMA-ToM: Multi-modal multi-agent theory of mind. InProceedings of the AAAI Conference
+on Artificial Intelligence (AAAI), 2025.
+[30] Tianmin Shu, Abhishek Bhandwaldar, Chuang Gan, Kevin A Smith, Shari Liu, Dan Gutfreund,
+Elizabeth Spelke, Joshua B Tenenbaum, and Tomer D Ullman. AGENT: A benchmark for
+core psychological reasoning. InProceedings of the 38th International Conference on Machine
+Learning (ICML), pages 9614–9625, 2021.
+[31] Elizabeth S Spelke. Principles of object perception.Cognitive Science, 14(1):29–56, 1990.
+[32] Elizabeth S Spelke. Core knowledge.American Psychologist, 55(11):1233–1243, 2000.
+[33] James W. A. Strachan, Dalila Albergo, Giulia Borghini, Oriana Pansardi, Eugenio Scaliti,
+Saurabh Gupta, Krati Saxena, Alessandro Rufo, Stefano Panzeri, Guido Manzi, Michael S. A.
+Graziano, and Cristina Becchio. Testing theory of mind in large language models and humans.
+Nature Human Behaviour, 8:1285–1295, 2024.
+[34] Shengbang Tong, Zhuang Liu, Yuexiang Zhai, Yi Ma, Yann LeCun, and Saining Xie. Eyes wide
+shut? exploring the visual shortcomings of multimodal LLMs. InProceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), pages 9568–9578, 2024.
+[35] Tomer Ullman. Large language models fail on trivial alterations to theory-of-mind tasks.arXiv
+preprint arXiv:2302.08399, 2023.
+12
+
+===== PAGE 13 =====
+[36] Henry M Wellman, David Cross, and Julanne Watson. Meta-analysis of theory-of-mind
+development: The truth about false belief.Child Development, 72(3):655–684, 2001.
+[37] Heinz Wimmer and Josef Perner. Beliefs about beliefs: Representation and constraining
+function of wrong beliefs in young children’s understanding of deception.Cognition,
+13(1):103–128, 1983.
+[38] Amanda L Woodward. Infants selectively encode the goal object of an actor’s reach.Cognition,
+69(1):1–34, 1998.
+[39] Ruoxuan Zhang, Qiyun Zheng, Zhiyu Zhou, Ziqi Liao, Siyu Wu, Jian-Yu Jiang-Lin, Bin Wen,
+Hongxia Xie, Jianlong Fu, and Wen-Huang Cheng. Mindpower: Enabling theory-of-mind
+reasoning in VLM-based embodied agents. InProceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2026.
+13
+
+===== PAGE 14 =====
+Supplementary Material
+Perception, Not Reasoning, Limits Visual Theory of Mind
+A Ba Bp Bf C
+This supplementary is organized around a single evidentiary chain: visual false-belief failures persist
+when models must extract state from pixels, but largely disappear when the missing perceptual
+state is supplied as text. Section A fixes the protocol and accounting. Section B shows the full stage
+and template breakdowns. Section C documents the complete task family. Section D explains the
+matched uncertainty estimates and gives the axiomatic characterization of PCR. Section E relates
+the claim to competing accounts. Section F states the remaining caveats. Section G closes alternative
+explanations with targeted ablations, including VLM-as-parser, visibility stripping, paraphrases,
+chain-of-thought, self-scaffold baselines, the scaffold-content ladder, length-matched corruption
+controls, a scaffold-length analysis, and an audit of the MuMA-ToM scaffolds. Section H gives
+verbatim prompts and outputs, including failures at the text-only ceiling.
+A Implementation details
+Reproducibility map.Every protocol element in the main text has a corresponding entry here:
+stimulus generation and seed formula (§A.1); automatic parser (§A.2); API request parameters,
+retry logic, and call accounting (§A.3); answer grading (§A.4); error categorization (§A.5); prompt
+paraphrases (§A.6); statistical tests (§D); exact model identifiers (§F); ablation scaffolds and controls
+(§G); and verbatim prompts with model outputs for every condition (§H). The evaluation harness,
+stimulus generator, and complete logged responses are released at the URL given in the abstract.
+A.1 Stimulus generation
+All 1,000 stimuli are generated programmatically using PIL (Python Imaging Library). Each panel
+measures 200×200 pixels. Multi-panel stimuli are created by concatenating panels horizontally,
+yielding images of width 200×N panels where Npanels is the panel count (4–6 depending on template).
+Adjacent panels are separated by a 2-pixel light gray (#DDDDDD) divider.
+Entity rendering parameters.Characters (agents) are rendered as filled circles with radius 18 px.
+Objects are smaller filled circles with radius 10 px (12 px for Stage 1 templates). Containers are filled
+rectangles of 58×38 px. Obstacles and doors are gray ( #888888) or brown (#8D6E63) rectangles.
+Room boundaries are drawn as 2-pixel black outlines.
+Color palettes.Six agent colors: blue ( #1565C0), red ( #C62828), green ( #2E7D32), purple
+(#6A1B9A), orange ( #E65100), teal ( #00838F). Five object colors: yellow ( #FFD600), amber
+(#FF6F00), lime ( #76FF03), pink ( #E040FB), cyan ( #00E5FF). Six container colors: light-blue
+(#42A5F5), coral ( #EF5350), brown ( #5D4037), mint ( #66BB6A), violet ( #AB47BC), peach
+(#FF7043). For each probe variant, character colors, object colors, and container colors are sampled
+without replacement from their respective palettes using a seeded random number generator (seed
+=10,000×(template_index+1)+variant_index), ensuring full reproducibility.
+Zero text constraint.No text labels, panel numbers, character names, or narration appear in any
+stimulus image.
+A.2 Automatic vision parser
+The parser operates on the saved PNG image with no access to generation metadata.
+Foreground masking.A pixel is classified as foreground if it is not white ( RGB>210 on all
+channels), not black ( <50 on all channels), not gray (channel spread <30 and mean between
+80–210), and not door-brown (|R−141|<25∧|G−110|<25∧|B−99|<25).
+14
+
+===== PAGE 15 =====
+Connected component extraction.Flood-fill BFS from each unvisited foreground pixel, expanding
+to 4-connected neighbors within ∆RGB <60 from the seed pixel. Components smaller than 40 pixels
+are discarded. Components are capped at 6,000 pixels to prevent runaway fills.
+Entity classification.Each blob is classified by area and circularity (area / bounding-box area):
+•Agent: circular (0.55≤circularity≤0.90, aspect ratio0.65–1.35) and area 400–2,000 px.
+•Object: circular and area 100–550 px.
+•Container: non-circular and area≥1,500px.
+Color identity is assigned by nearest-neighbor matching against the known palette (Euclidean
+distance in RGB, threshold 80).
+Event inference.Agent presence is compared across consecutive panels. If an agent present in
+panel k is absent in panel k+1, an exit event is inferred. Object position (left/right of panel center)
+is tracked to infer transfer events.
+Scaffold serialization.Parsed structure is serialized as: “Panel k: agents: [name] agent ([side]-
+[vertical]). objects: [name] object ([side]-[vertical]). containers: [name] container ([side]-[vertical]).”
+A.3 API call protocol
+All models are accessed via the OpenRouter API (https://openrouter.ai/api/v1/chat/
+completions).
+Request parameters.Temperature: 0.0. Max tokens: 200. Single-turn conversation (one user
+message). Images are included as base64-encoded PNG in the image_url field for conditions A,
+Ba, Bp, Bf , and all controls. Condition C sends text only (no image).
+Retry logic.HTTP 429 (rate limit): exponential backoff starting at 30 s. HTTP 5xx: retry after 15 s.
+Maximum 3 retries per call. Failed calls are recorded as incorrect with anERRORresponse prefix.
+Parallelization.Multiple API keys support parallel workers. Task queue distributes probe-model-
+condition triples. Results are checkpointed every 100 completions.
+Call accounting and cost.The paper-facing benchmark used 108,500 API calls: 60,200 for the
+Abstract 2D panels experiment (five conditions, three adversarial controls, three prompt paraphrases)
+and 48,300 for the naturalistic 3D game-scene evaluations on MuMA-ToM and MindPower. The cor-
+responding paper-facing cost was $319.83: $65.69 for the Abstract 2D panels component and $254.14
+for MuMA-ToM and MindPower. With the 38,500 Abstract 2D panels ablation calls in §G ($50.00)
+and 12,000 further calls ($15.73) for the scaffold-content ladder, the extension of the corruption con-
+trols to Ministral-8B, and a re-run of Condition A to check for API drift (§G.6, §G.7; the corruption
+runs on the other six models are already included in the totals above), the full audit trail comprises
+∼159,000 API calls and $385.56. The Condition A re-run gave 73.5% (2,572/3,500) against 73.9%
+(2,585/3,500) originally, a drift of−0.4pp; all comparisons in the paper use the original run.
+A.4 Answer grading
+Responses are normalized (lowercased, whitespace-collapsed) before grading. Grading is
+answer-type-specific:
+•yes_no: Response must start with the expected token (“yes” or “no”).
+•number: Expected digit must appear in the first 4 characters.
+• left_right: Response must contain any of the expected aliases (e.g., “left”, “left box”, container
+color name).
+•belief_split(reality-vs-belief template): The response is split at the word “belief” (or at midpoint
+if absent); the reality answer must appear before the split and the belief answer after.
+•All other types: Response must contain at least one expected alias.
+No partial credit is awarded. The grading function is deterministic and identical across all conditions
+and models.
+15
+
+===== PAGE 16 =====
+Table S1:Stages 1–2 per-model resultsacross the seven-model lineup (all five conditions, accuracy ↑
+%).Bold: best per row;italic: 2nd.
+Stage 1: Object Tracking Stage 2: Goal Attribution
+Model A Ba Bp Bf C A Ba Bp Bf C
+GPT-4o [23] 83.3 83.3100 10083.3 93.0 91.5100 100 100
+Gemini 2.5 Pro [10] 71.0 83.383.780.394.094.096.094.5 92.5100
+Claude Sonnet 4 [1] 33.3 50.099.3 99.310075.0 75.0100 10051.5 †
+Qwen2.5-VL-72B [3] 83.3 73.710094.7100 100 100 100 100 100
+Llama 4 Mav. [20] 81.3 80.3100 10098.083.0 81.010099.5100
+GPT-4.1-mini [24] 81.7 82.0100 10083.3 91.0 85.0100 100 100
+Ministral-8B [21] 75.7 47.791.779.367.010097.5100 100 100
+Mean72.8 71.596.493.489.4 90.9 89.499.298.993.1
+†Claude text-only Stage 2 anomaly: direction-convention misinterpretation in pure-text probes (see §F).
+A.5 Error categorization
+Stage 3 Condition A errors are classified by a deterministic rule applied to the normalized model
+output. A response is labeled areality-biaserror if it contains an “actual alias” (the object’s veridical
+location or the reality-consistent answer) but does not contain the expected belief-consistent answer;
+all remaining errors are uncategorized. Reality-bias errors account for 549 of 915 visual-only Stage 3
+errors across the seven-model lineup (60.0%); the rule is identical across models.
+A.6 Prompt paraphrase variants
+Three paraphrases of each Stage 3 Condition A question are constructed:
+• Restructured: “This image has [Npanels] panels showing colored figures, containers, and smaller
+objects. Follow the sequence carefully before answering: [task_prompt] [answer_instruction]”
+• Vocabulary: Synonym substitution applied to the original question (“character” → “figure”,
+“container”→“box”, “object”→“item”, “search”→“look in”).
+•Distractor: “The background is white. [original question]”
+B Extended results
+B.1 Stages 1–2 per-model results
+Table S1 presents the complete Stages 1–2 per-model matrix showing all five conditions.
+B.2 Per-template Stage 3 results
+Table S2 presents accuracy for all 10 Stage 3 templates.
+B.3 Prompt robustness extended
+The three paraphrase variants (§A.6) are applied to Stage 3 Condition A and compared against the
+7-model abstract Stage 3 baseline (73.9%). The paraphrases are evaluated on 200 probes per model,
+whereas the baseline uses all 500. Per-variant accuracies over the seven-model lineup are 70.1%
+(restructured), 71.9% (vocabulary), and 69.9% (distractor), within 4.0 pp of the original (Table 7a).
+The distractor sentence differs from the adversarial insertion used for C and Bf . Paraphrases of
+C and Bf are reported in §G.3; the inferential competence captured in the matched conditions is
+robust to phrasing.
+16
+
+===== PAGE 17 =====
+Table S2:Stage 3 per-template Condition A accuracy↑ (%)across the seven-model lineup (350
+instances per template), sorted by difficulty. Parser: structural parse accuracy (%).
+Template Acc↑Parser↑
+unexpected_contents55.4 100
+two_rooms56.0 94
+second_order64.9 100
+reality_vs_belief70.0 100
+knowledge_belief72.0 100
+sally_anne_reality74.9 100
+knowledge_who_knows80.6 100
+sally_anne_search83.4 100
+sally_anne_belief85.7 100
+perspectives_differ95.7 100
+Mean 73.9 99.4
+Figure S1:Developmental stage hierarchy.Each stage requires the representational output of the
+previous one, mirroring the cascade identified in human cognitive development: object individuation
+at 3–5 months [ 31], goal attribution at 6–12 months [ 38, 9], and false-belief reasoning at ∼4
+years [37, 5]. 20 templates×50 variants = 1,000 probes.
+C Complete template catalog
+The 20 templates are organized into three stages mirroring the developmental cascade in human
+cognitive development (Figure S1): object individuation must precede goal attribution, which must
+precede belief modeling. Each stage’s templates are described below.
+C.1 Stage 1: Object tracking (6 templates)
+occlusion_consistent/occlusion_violation.5 panels. A colored circle moves rightward toward
+a gray barrier, disappears behind it (Panels 3–4), and reappears on the correct side (consistent) or
+the wrong side (violation). Question: “Is the final reappearance position consistent with the earlier
+direction of motion, yes or no?” Answer: yes/no.
+count_two/count_three.4 panels. Two (or three) identically or distinctly colored circles follow
+crossing trajectories. Question: “How many distinct circular objects are present?” Answer: 2 or 3.
+permanence.4 panels. A colored circle enters a container (Panels 1–2), remains hidden (Panels
+3–4). Question: “In the final panel, is the circle hidden or gone?” Answer: hidden.
+color_change.5 panels. A colored circle moves behind a barrier and reappears in a different color.
+Question: “Are the circle colors before and after the barrier the same or different?” Answer: different.
+17
+
+===== PAGE 18 =====
+C.2 Stage 2: Goal attribution (4 templates)
+goal_upper.4 panels. An agent moves along a trajectory toward one of two targets (upper or
+lower). Question: “Which target is the agent heading toward?” Answer: upper/lower.
+detour_obstacle.5 panels. An agent takes a curved path around a gray obstacle to reach a target.
+Question: “Why did the character take the curved path instead of going straight: A) prefers curves,
+B) obstacle blocking, or C) avoiding the target?” Answer: B.
+no_goal.4 panels. A circle drifts at constant velocity without changing direction toward any target.
+Question: “Is this motion goal-directed?” Answer: no.
+wall_removed.2 panels. Left panel: straight path with no obstacle. Right panel: curved detour path
+with no obstacle. Question: “With no obstacle present, which path would a goal-directed character
+choose, straight or curved?” Answer: straight.
+C.3 Stage 3: False belief / Theory of Mind (10 templates)
+sally_anne_search/sally_anne_belief/sally_anne_reality.6 panels. Classic Sally-Anne scenario:
+Agent 1 places an object in Container L, exits, Agent 2 transfers the object to Container R, Agent 1
+returns. Three question variants probe search prediction (where will Agent 1 look first? Left), belief
+report (where does Agent 1 think the object is? Left), and reality check (where is the object actually?
+Right).
+reality_vs_belief.6 panels. Same scenario. The model must simultaneously report both the object’s
+actual location (right) and Agent 1’s believed location (left) in a single response.
+knowledge_who_knows/knowledge_belief.5 panels. Two agents are in a room; one exits, the
+object is moved, the exiting agent returns.knowledge_who_knows: “Which character knows the
+object’s current location?” (the one who stayed).knowledge_belief: “Where does the returning
+character think the object is?” (left, the pre-transfer location).
+unexpected_contents.5 panels. Agent 1 sees a box with round symbols, opens it to find rectangular
+contents, closes it. Agent 2 arrives and sees only the closed box with round symbols. Question:
+“What does Agent 2 think is inside?” Answer: round objects.
+two_rooms.5 panels. Two rooms divided by a wall. Agent 1 carries an object from the left room
+to the right room while Agent 2 watches. Agent 2 then exits. While Agent 2 is gone, Agent 1 places
+the object in the right container. Agent 2 returns. Question: “Where does Agent 2 think the object
+is?” Answer: right (Agent 2 saw the transfer to the right room before leaving).
+perspectives_differ.5 panels. Similar to Sally-Anne but the question asks whether two agents hold
+the same or different beliefs about the object’s location. Answer: different.
+second_order.5 panels. One agent is absent during a transfer but observed by a third party.
+Question: “Does the third-party agent know that the absent agent holds a false belief?” Answer: yes.
+D Statistical methodology
+D.1 Bootstrap confidence intervals
+All confidence intervals are computed via probe-level bootstrap resampling. For each condition,
+the accuracy matrix has dimensions M×N probes (models × probes). We resample Nprobes probe
+indices with replacement 10,000 times, compute the mean accuracy across all models and resampled
+probes for each bootstrap iteration, and report the 2.5th and 97.5th percentiles as the 95% CI.
+18
+
+===== PAGE 19 =====
+Figure S2:Three pathways through a shared reasoning module ρ.Visual input I enters via
+perceptual extraction π (fvis); a narration T enters via the text encoder τ (ftxt); a scaffold sx
+augments the visual path through token-level fusion ⊕ (fscaffold). The five-condition protocol (§3)
+selects which pathway is active.
+D.2 McNemar tests
+McNemar’s test is applied to matched pairs: for each (model, probe_id) combination, we compare
+whether the response was correct under condition X vs. condition Y , yielding a 2×2 contingency
+table. The test statistic is χ2 = (b−c)2/(b+c), compared against χ21. We apply Bonferroni correction
+across 12 pairwise comparisons ( αBonf = 0.05/12 = 0.0042). Stage 3 yields n= 7×500 = 3,500
+paired observations per comparison. The five comparisons added for the scaffold-content ladder
+and corruption controls ( Bidentity, Bstatic, Dmismatch, Dnoise, Dshuffled, each against A) use the
+same uncorrected statistic on the same 3,500 matched pairs against the original Condition A, and
+are evaluated against the same αBonf = 0.0042. Under a single correction over all 17 comparisons
+(α= 0.05/17 = 0.0029), every conclusion holds except one: Bstatic (p=.0033 ) is significant at
+αBonf = 0.0042but not at0.0029, so we treat it as a weak effect.
+D.3 PCR bootstrap
+The Perceptual Contribution Ratio is bootstrapped by resampling probe indices and computing
+PCRx = (AccB −AccA)/(AccC −AccA)for each bootstrap sample.
+D.4 Axiomatic characterization of PCR
+The Perceptual Contribution Ratio (Definition 1) admits a uniqueness characterization from four
+natural axioms. The argument formalizes PCR as theshare of the closable visual-to-text gap recovered
+19
+
+===== PAGE 20 =====
+by the scaffold, and shows that any metric respecting a small set of natural invariances must coincide
+with PCR.
+Let M be a candidate metric defined on triples (a,b,c) with c > a, where a= Acc(A), b= Acc(Bx),
+and c= Acc(C). The pathways formalized in Figure S2 (also stated in §3.3) supply the operational
+meaning: A corresponds to fvis, C to ftxt, and Bx to fscaffold at fidelity x. Consider the following
+axioms.
+(A1)Endpoint calibration.M(a,a,c) = 0andM(a,c,c) = 1.
+(A2)Translation invariance.M(a+δ,b+δ,c+δ) =M(a,b,c)for allδ∈R.
+(A3)Positive scale invariance.M(αa,αb,αc) =M(a,b,c)for allα >0.
+(A4)Linearity in the scaffolded condition.For fixeda,c, the mapb7→M(a,b,c)is affine.
+Together, axioms (A2) and (A3) are equivalent to invariance under positive affine mapsz7→αz+δ
+withα >0.
+Interpretation.(A1) anchors the metric to the construct: a scaffold that fails to improve over
+visual-only contributes nothing (purely conceptual deficit), while a scaffold that reaches the
+text-only ceiling has fully closed the perceptual gap. (A2) and (A3) express that accuracy is an
+interval-scale quantity with neither a canonical zero (chance levels differ across question formats
+and answer cardinalities) nor a fixed unit (proportions vs. percentages); the perceptual-vs-conceptual
+decomposition should be invariant to such reparametrizations. (A4) formalizes PCR as ashare:
+equal absolute gains in scaffolded accuracy contribute equally to the recovery score, and a stochastic
+mixture of two scaffolds receives the convex combination of their individual PCRs, the natural
+property for a metric reporting the fraction of a gap closed.
+Proposition 1(Uniqueness of PCR).Any function M satisfying (A1) through (A4) coincides with
+the Perceptual Contribution Ratio:
+M(a,b,c) = b−ac−a .(S1)
+Proof.Fix(a,b,c)withc > a. By (A2) withδ=−a,
+M(a,b,c) =M(0,b−a,c−a).
+Sincec > a, the scalarα:= (c−a)−1 is positive, so (A3) applies:
+M(0,b−a,c−a) =M
+
+0, b−ac−a ,1 =:g  b−ac−a ,
+where g(t) :=M(0, t,1) . The metric is therefore a univariate function of the affine ratio
+t= (b−a)/(c−a) . By (A1), g(0) = 0and g(1) = 1. By (A4), g is affine: g(t) =pt+q for constants
+p,q∈R. The endpoint conditions forceq= 0andp= 1, sog(t) =tand
+M(a,b,c) = b−ac−a .
+Necessity of each axiom.Each axiom is independently required. Dropping (A1) admits any affine
+rescaling αPCR+β . Dropping (A2) admits metrics that depend on the absolute origin (e.g., b/c).
+Dropping (A3) admits metrics that depend on the unit (e.g., the raw gap b−a). Dropping (A4) admits
+any endpoint-preserving reparametrization M(a,b,c) =g((b−a)/(c−a)) with g(0) = 0and g(1) = 1;
+on the in-range interval t∈[0,1] , examples include tk for k >0or √t. Such reparametrizations would
+assign different contribution scores to the same scaffolded accuracy depending on the curvature of
+the chosen g, with no principled basis for selecting one curvature over another. Among metrics that
+respect all four invariances, PCR is the unique choice.
+Out-of-range values.The proposition makes no assumption that b∈[a,c] , so the characterization
+extends to the empirically observed regime in which PCR>1 (the scaffold-plus-image combination
+matches or exceeds the text-only ceiling; §G) and PCR<0 (scaffold actively interferes with
+reasoning, observed for the blob-detection parser on Stage 3 and for several mid-scale models on
+Ba). The same affine ratio governs all three regimes, which is what licenses the dose-response
+interpretation of the triplet(PCR a,PCRp,PCRf ).
+20
+
+===== PAGE 21 =====
+E Extended discussion of competing accounts
+Several recent works argue that VLM failures on social reasoning tasks are cognitive rather than
+perceptual. We discuss each in detail and explain why our findings are complementary rather than
+contradictory.
+Liuet al. [ 19]: “Seeing but Not Believing.”This work demonstrates that VLMs internally attend
+to correct visual evidence yet still output incorrect answers on VQA benchmarks. The key distinction
+from our work lies in theperceptual extraction complexityof the tasks. Their benchmarks involve
+single-image VQA where the relevant visual evidence occupies a spatially localized region within
+one frame. Our stimuli requiresequential multi-panel entity tracking. Our data directly address
+whether this distinction holds: the 60.0% reality-bias error rate shows that models correctly identify
+where the object currently is but fail to track who was absent when it moved.
+Chenet al. [ 8]: “VLMs See What You Want but Not What You See.”VLMs achieve high
+performance on intent recognition but consistently fail at perspective-taking, scoringbelow chance
+on PerspectBench. Our work offers a complementary interpretation: the egocentric bias they observe
+is precisely what our reality-bias error category captures (549 of 915 visual-only Stage 3 errors;
+60.0%). We demonstrate that this bias disappears when perceptual scaffolding provides explicit
+agent-perspective information ( Bf : 98.4% vs. A: 73.9%).
+Tonget al. [ 34]: “Eyes Wide Shut.”Their identification of systematic visual shortcomings in
+multimodal LLMs traceable to CLIP-based encoders provides complementary evidence from the
+representation-learning side. Our scaffolding intervention demonstrates the downstream consequence:
+when structured perceptual content is provided externally, the reasoning succeeds, consistent with
+their finding that visual grounding remains an open challenge.
+Zhanget al. [ 39]: “MindPower.”Their BDI framework decomposes ToM reasoning into
+perception, mental reasoning, decision, and action layers, finding that VLMs perform poorly across
+all layers but especially on mental reasoning. Our work is consistent with their per-layer analysis
+and adds thescaffolding interventionthat isolates the perceptual from the conceptual component.
+Jinet al. [ 14]: “MMToM-QA.”Our benchmark differs in three key respects: (i) Abstract 2D
+panels rather than naturalistic 3D game scenes; (ii) a scaffolding intervention that disentangles
+perception from reasoning; (iii) evaluation across a developmental hierarchy rather than testing false
+belief in isolation.
+Shapiraet al. [ 28]: “Clever Hans or Neural Theory of Mind?”Our work operates in the
+visual modality and reaches a structurally different conclusion: for frontier models, the inferential
+competence (demonstrated by 94.5% text-only accuracy) is available in the text modality, and
+the visual failure is attributable to perceptual extraction, not pattern matching.
+Huet al. [ 13]: “Re-evaluating Theory of Mind Evaluation in LLMs.”Our five-condition
+protocol directly addresses this concern: by holding the reasoning task constant and varying only
+the perceptual input modality, we isolate whether the model is performing genuine belief-reality
+dissociation or relying on linguistic shortcuts.
+F Additional limitations and caveats
+Stimulus and model generalization.Our evaluation covers two stimulus regimes, abstract 2D pan-
+els and naturalistic 3D game scenes from MuMA-ToM and MindPower. Generalization to in-the-wild
+human video, surveillance footage, or first-person egocentric video is not established and is a natural
+next test. The model lineup is limited to seven systems available through a commercial API during
+March 2026 (main protocol) and July 2026 (§G.6, §G.7); ToM-specific fine-tunes, open-weight
+models with object-centric objectives, and not-yet-deployed multimodal systems are not represented.
+Methodological scope.Models are accessed as black boxes through a single inference provider
+with deterministic decoding; we measure functional consequences on outputs, not attention patterns
+21
+
+===== PAGE 22 =====
+or internal representations. The MindPower Bf scaffold is an oracle full-information condition rather
+than a leakage-controlled perceptual ceiling; the perceptual-only finding for MindPower rests on Bp,
+and the MindPower PCRp values (Table 2c) are the appropriate quantitative summary on that regime.
+Reality-bias categorization is based on a deterministic algorithm (§A.5) and inherits its definitions.
+Answer balance.Allsally_anne_search(50 probes) andsally_anne_belief(50 probes) have
+expected answer “left.” Allsally_anne_reality(50 probes) have expected answer “right.” Because
+every template contributes exactly 50 probes, template-reweighted PCR (§G.10) coincides with the
+probe-level PCR.
+Abstract 2D panels.The Heider-and-Simmel-style abstraction deliberately isolates cognitive
+capacity from appearance-based recognition. The perceptual bottleneck identified here is a lower
+bound: naturalistic 3D game scenes impose greater perceptual demands. Generalization from
+Abstract 2D panels to naturalistic 3D game scenes is tested separately by MuMA-ToM and
+MindPower rather than inferred from the panel experiments.
+Perception/reasoning boundary.The attribution of the deficit to perception is made relative to the
+operational definition in §3: structured scene-state extraction, including cross-frame correspondence
+and event detection. Cross-frame event linking is an intermediate representation that belief inference
+consumes, and it can itself be viewed as reasoning-relevant. The scaffold-content ladder (§G.6)
+shows that the recovery is driven by this event structure rather than by entity names or static positions;
+a definition that assigns event linking to reasoning would move that increment to the reasoning side,
+while leaving the finding that belief-level inference from access facts is not the limiting step.
+Interpretation of the mismatch control.Because Dmismatch partners share the template, they carry
+useful template-level information while misdescribing the specific scene. Its small net effect may
+therefore reflect two opposing effects rather than the absence of any effect. The corruption effects
+are also strongly model-dependent, and Dnoise and Dshuffled are weak by construction. We therefore
+treat the controls as evidence against a text-volume account, not as proof that the benefit requires
+image-bound content. Designing multimodal augmentations that jointly manipulate the visual and
+textual inputs while systematically varying their alignment is a promising direction for future work.
+Broader impacts.This work is diagnostic: it trains no models and uses procedurally generated
+stimuli and existing public benchmarks, with no human subjects or personal data. On the positive
+side, localizing visual ToM failures to perceptual extraction can direct effort toward front-ends that
+make assistive, educational, and collaborative systems more reliable at tracking what the people
+they serve have and have not seen. On the negative side, better tracking of who saw what could
+also strengthen systems used for surveillance or for manipulation that exploits gaps in a person’s
+knowledge. Our protocol measures this capability rather than providing it, and we release stimuli
+and evaluation code only, not models.
+Dataset licenses.MuMA-ToM [ 29] is released under the MIT license and MindPower [39] under
+Apache-2.0, as declared on their dataset cards; the simulator assets they build on may carry separate
+terms.
+API-based evaluation.All models are accessed through the OpenRouter API as black boxes.
+Temperature 0 removes stochasticity, meaning each model gives one deterministic answer per probe;
+error bars reflect cross-probe and cross-model variance, not model uncertainty.
+Stage 1 leading prompts.Three Stage 1 templates have answer instructions that contain only
+the expected answer:count_two(“Answer ONLY ‘2’ ”),permanence(“Answer ONLY ‘hidden’ ”),
+andcolor_change(“Answer ONLY ‘different’ ”). Within-probe comparisons are unaffected, but
+the absolute accuracy of these templates, and hence the Stage 1 aggregates, is inflated. No Stage 3
+template, which carries the paper’s claims, is affected.
+Scaffold fidelity spectrum.The five conditions ( A,B a,B p,B f ,C ) sample the scaffold fidelity
+continuum at discrete points. The additional Bvis−stripped and Bvlm conditions (§G) provide two
+further data points on this continuum.
+22
+
+===== PAGE 23 =====
+Table S3: Bvlm per-model Stage 3 accuracy(Stage 3 ablation subset, n=500). Two independent
+parser models.
+Model Bvlm A Bp Bf
+GPT-4o Claude
+parser parser
+GPT-4o [23] 81.6 77.2 76.4 90.2 99.2
+Gemini 2.5 Pro [10] 79.6 60.8 71.8 90.4 92.6
+Claude Sonnet 4 [1] 79.8 76.8 78.8 97.6 100.0
+Qwen2.5-VL-72B [3] 62.0 59.6 79.2 90.0 100.0
+Llama 4 Mav. [20] 84.0 84.2 87.0 85.0 99.8
+GPT-4.1-mini [24] 72.0 74.8 70.2 80.2 100.0
+Mean 76.5 72.277.2 88.9 98.6
+PCR−0.04−0.27 n/a 0.63 1.16
+Claude text-only Stage 2 anomaly.Claude Sonnet 4 scores 51.5% on text-only goal attribution
+(Table S1), far below the other six models (all 100%). Inspection reveals a systematic direction-
+convention misinterpretation in pure-text probes: Claude interprets “upper” and “lower” differently
+from the intended spatial convention when no image is present. This anomaly is specific to Stage 2
+text-only and does not affect Stage 3 conclusions.
+Model API versions.All models were evaluated through OpenRouter. We report the exact model
+identifiers used:
+openai/gpt-4o-2024-11-20,
+google/gemini-2.5-pro-preview (abstract regime; google/gemini-2.5-pro on MuMA-
+ToM and MindPower),
+anthropic/claude-sonnet-4(served as the 2025-05-22 snapshot),
+qwen/qwen2.5-vl-72b-instruct,
+meta-llama/llama-4-maverick-17b-128e-
+instruct,
+openai/gpt-4.1-mini-2025-04-14,
+mistralai/ministral-8b-2512.
+G Additional ablation experiments
+This section stress-tests the perceptual-bottleneck interpretation by asking seven failure-mode
+questions: can a stronger parser rescue the image-only condition, is the gain merely explicit visibility
+leakage, do text scaffolds survive paraphrase, can the model repair itself with chain-of-thought, are
+the results an artifact of template imbalance, which scaffold content drives the recovery, and does
+the benefit require correct content or merely more text? The first five ablations contribute 38,500
+additional Abstract 2D panel calls; the scaffold-content ladder, the Ministral-8B corruption extension,
+and a re-run of Condition A to check for API drift contribute 12,000 more; the corruption runs on
+the other six models are already included in the totals of §A.3.
+G.1 Experiment 1: VLM-as-parser (B vlm)
+Two frontier VLMs are independently tested as zero-shot visual scene describers. For each of the 500
+Stage 3 probes, the parser model is prompted with a system message instructing a panel-by-panel
+description of entity positions, colors, and inter-panel changes, without any ToM interpretation (max
+600 tokens, temperature 0). The resulting narrations are then provided as scaffolds to the ablation
+subset reported in Table S3.
+Neither parser provides an aggregate benefit over visual-only input. GPT-4o-as-parser (76.5%)
+is statistically indistinguishable from Condition A on the same six-model abstract subset (77.2%;
+PCR =−0.04); Claude-Sonnet-4-as-parser (72.2%) degrades performance by 5.0 pp (PCR =−0.27).
+The corresponding values relative to the seven-model main aggregate (Cond A = 73.9%, Cond C
+= 94.5%) are PCRGPTvlm = 0.13 and PCRClaudevlm =−0.08 . Although both parsers generate substan-
+23
+
+===== PAGE 24 =====
+Table S4: Bvis−stripped per-model Stage 3 accuracy(n=500), six models with logged runs (Ministral-
+8B was not evaluated in this condition). Compared againstB p andB f on the same six models.
+Model Bvis−stripped Bp Bf ∆vsB f
+GPT-4o [23] 99.6 90.2 99.2(+0.4)
+Gemini 2.5 Pro [10] 54.4 90.4 92.6(−38.2)
+Claude Sonnet 4 [1] 100.0 97.6 100.0 0.0
+Qwen2.5-VL-72B [3] 99.8 90.0 100.0(−0.2)
+Llama 4 Mav. [20] 98.2 85.0 99.8(−1.6)
+GPT-4.1-mini [24] 88.0 80.2 100.0(−12.0)
+Mean 90.088.9 98.6(−8.6)
+Table S5:Paraphrase robustness for C andB f (Stage 3 ablation subset,n=3,000 per variant).
+Condition Acc (%)∆vs original
+C (original) 95.7 n/a
+Crestructured 95.2(−0.5)
+Cvocabulary 94.8(−0.9)
+Cadversarial 97.2(+1.5)
+Bf (original) 98.6 n/a
+Bf,restructured 93.9(−4.7)
+Bf,vocabulary 97.1(−1.5)
+Bf,adversarial 97.6(−1.0)
+tially richer descriptions than the blob-detection parser, they commit systematic errors: hallucinating
+entities not present in panels, inconsistently naming colors across panels, and failing to detect exit
+events. The consistency across two independent frontier parsers confirms that the bottleneck is a
+fundamental limitation of current visual encoders, not an artifact of any single model’s weaknesses.
+G.2 Experiment 2: Visibility ablation (B vis−stripped)
+Explicit visibility/absence phrases are removed from Bf scaffolds via regex matching against nine
+patterns, which cover the phrase families listed below. On average, 67±35 characters (8.9% of
+scaffold length per probe) are removed per probe, affecting 80% of probes. Phrasings outside
+the pattern set (e.g. “had already seen”, “never saw”, “left before the object was placed”) are not
+removed, so the stripping is conservative and some visibility content remains inB vis−stripped.
+Visibility patterns removed:
+• Sentences containing: “was/is absent”, “did/does not see/observe”, “was/is not present”, “unaware
+of”, “has no knowledge of”, “cannot/could not see”, “left the room/scene”, “exited the room/scene”,
+“not in the room”, “outside the room”, “while X was gone/away”, “without X knowing/seeing”.
+The aggregate result over the six evaluated models (Bvis−stripped = 90.0%; PCRvis−stripped = 0.69,
+computed against A = 77.2%and C = 95.7%on the same models) confirms that most of the scaffold
+benefit derives from perceptual content rather than explicit visibility predicates. Gemini 2.5 Pro
+is a notable outlier (54.4%), suggesting model-specific reliance on explicit absence cues; all other
+models remain at or above 88.0%.
+G.3 Experiment 3: Paraphrase robustness for C andB f
+Three paraphrase variants are applied to both Condition C and Bf scaffolds across the ablation
+subset and 500 probes:
+•Restructured: Panel sentences in reverse order.
+•Vocabulary: Synonym substitution (“character”→“figure”, “container”→“box”, etc.).
+• Adversarial: Ullman-style misleading insertion: “Note that all characters could potentially see
+everything that happens in the scene.”
+24
+
+===== PAGE 25 =====
+Table S6:Chain-of-thought self-scaffolding(Stage 3 ablation subset, n=500 per model). †Gemini
+produces truncated markdown reasoning; only 15% of responses were parseable.
+Model ACoT A∆
+GPT-4o [23] 76.6 76.4(+0.2)
+Gemini 2.5 Pro† [10] N/A 71.8 N/A
+Claude Sonnet 4 [1] 90.6 78.8(+11.8)
+Qwen2.5-VL-72B [3] 74.0 79.2(−5.2)
+Llama 4 Mav. [20] 62.8 87.0(−24.2)
+GPT-4.1-mini [24] 79.0 70.2(+8.8)
+Mean (excl. Gem.) 76.678.3(−1.7)
+Table S7:Self-scaffold generate-then-reason baseline(Stage 3 ablation subset on Abstract 2D
+panels).A self asks the model to first describe the panels, then answer using its own description.
+Model Aself A∆
+GPT-4o [23] 77.6 76.4(+1.2)
+Gemini 2.5 Pro [10] 14.6 71.8(−57.2)
+Claude Sonnet 4 [1] 69.2 78.8(−9.6)
+Qwen2.5-VL-72B [3] 58.6 79.2(−20.6)
+Llama 4 Mav. [20] 56.2 87.0(−30.8)
+GPT-4.1-mini [24] 74.6 70.2(+4.4)
+Mean 58.577.2(−18.7)
+All six paraphrase conditions exceed 93%, confirming that the inferential competence measured
+by these conditions is robust and not phrasing-dependent.
+G.4 Experiment 4: Chain-of-thought self-scaffolding
+Each model in this ablation receives a system prompt instructing step-by-step panel description,
+presence/absence tracking, and then answering (max 600 tokens, temperature 0). The CoT prompt
+adds no external information.
+Chain-of-thought helps Claude Sonnet 4 ( +11.8 pp) and GPT-4.1-mini ( +8.8 pp), is neutral for
+GPT-4o (+0.2 pp), and hurts Qwen2.5-VL-72B (−5.2 pp) and Llama 4 Maverick (−24.2 pp); the
+mean over the five models with parseable outputs is −1.7 pp. Elicited step-by-step state tracking can
+therefore partially compensate where a model has marginal extraction capacity, but for no model does
+it reach the level of supplied scene state: Claude’s chain-of-thought score (90.6%) remains below
+its own Bp (97.6%). This is consistent with perception and reasoning being intertwined at the imple-
+mentation level. Our claim is functional rather than mechanistic: whatever the internal entanglement,
+the deficit is closed by supplying scene state and is not closed by prompting for more inference.
+G.5 Experiment 5: Self-scaffold generate-then-reason
+Each model in this ablation first generates a panel-by-panel scene description (max 600 tokens,
+temperature 0, no access to the question), then reasons over its own description together with the
+image (max 200 tokens, temperature 0). Two API calls are used per probe.
+Self-scaffolding (Aself) yields lower aggregate accuracy than standard Condition A. Only GPT-4o
+(+1.2 pp) and GPT-4.1-mini (+4.4 pp) show marginal gains; Gemini collapses under the generate-
+then-reason format, and the other affected models lose accuracy. The result is consistent with
+the Bvlm finding (§G.1): models’ own visual descriptions contain too many entity-identity and
+event-detection errors to serve as effective scaffolds for downstream belief reasoning.
+25
+
+===== PAGE 26 =====
+Table S8:Scaffold-content ladder per modelon Stage 3 ( n=500 per model). Bidentity: entities
+present in each panel, no positions.B static: per-panel positions, no events, linkage, or visibility.
+Model AB identity Bstatic Bp Bf
+GPT-4o [23] 76.4 79.4 88.2 90.2 99.2
+Gemini 2.5 Pro [10] 71.8 80.0 78.4 90.4 92.6
+Claude Sonnet 4 [1] 78.8 67.6 71.8 97.6 100.0
+Qwen2.5-VL-72B [3] 79.2 67.6 50.6 90.0 100.0
+Llama 4 Mav. [20] 87.0 77.2 83.0 85.0 99.8
+GPT-4.1-mini [24] 70.2 73.8 83.4 80.2 100.0
+Ministral-8B [21] 53.6 72.6 81.2 88.4 97.4
+Mean73.9 74.0 76.7 88.898.4
+G.6 Experiment 6: Scaffold-content ladder (B identity,B static)
+To separate perceptual repair from offloaded state tracking, two rungs are added below Bp and
+evaluated on the same 500 Stage 3 probes and the full seven-model lineup, with the image and
+question unchanged. Bidentity lists the entities in each panel, without positions; because the lists are
+per panel, an entity’s absence from a panel is implicit in its omission. Bstatic adds per-panel entity
+positions and presence but no events, no cross-panel linkage, and no explicit visibility or absence
+statements. Both are generated programmatically from the scene generator’s state. Every Bstatic
+scaffold was validated automatically against a 33-entry forbidden-term list using case-insensitive
+substring matching, with zero hits across all 500 scaffolds:belief, believe, intention, goal, did not see,
+didn’t see, was outside, was absent, moves, moved, places, placed, exits, exited, returns, returned, enters,
+entered, carries, carried, transfers, transferred, opens, opened, closes, closed, sees, saw, looking, looks,
+searches, search, knows. Example scaffolds fors3_two_rooms_000, the probe of Figure 4b:
+•B identity:Panel 1: red character; blue character; cyan object; mint container. Panel 2: red
+character; blue character; cyan object. Panel 3: red character; blue character; cyan object. Panel 4:
+red character; cyan object; brown container. Panel 5: blue character; cyan object; brown container.
+•B static:Panel 1: red character is in the left room; cyan object is near the left mint container; blue
+character is in the right room. Panel 2: red character is present in the room; cyan object is present;
+blue character is present in the room. Panel 3: red character is in the right room; cyan object is
+in the right room. Panel 4: red character is present in the room; cyan object is in the right brown
+container. Panel 5: blue character is present in the room; cyan object is in the right brown container.
+On aggregate, per-panel entity lists and static positions contribute little: Bidentity is statistically
+indistinguishable from A (+0.1 pp, p=.84 ), even though its per-panel lists already imply who is
+absent from which panel, and Bstatic is small but significant at αBonf (+2.8 pp, p=.0033 ; §D.2).
+The single largest increment (+12.1pp,B static →B p) comes from cross-frame event structure, and
+the remaining epistemic increment Acc(Bf )−Acc(B p) = 9.6 pp consists mainly of third-person
+access facts (“purple character was outside when the object moved”); the second-order template’s Bf
+additionally states the resulting first-order belief. The aggregate hides strong per-model heterogeneity
+(Table S8). Static positions alone recover most or all of the Bp gain for GPT-4o (+11.8 of +13.8 pp),
+GPT-4.1-mini (+13.2 vs. +10.0), and Ministral-8B (+27.6 of +34.8). They hurt Qwen2.5-VL-72B
+(−28.6), Claude Sonnet 4 (−7.0), and Llama 4 Maverick (−4.0). Entity lists alone hurt three models
+(Claude Sonnet 4, Qwen2.5-VL-72B, Llama 4 Maverick). The cross-frame event increment is
+therefore an aggregate statement, driven most by the models that cannot use static positions.
+Transcript analysis.We inspected the first50incorrect savedB static responses per model, in file
+order, for each of two models; failure labels were assigned by simple response-text rules. For Qwen2.5-
+VL-72B, 47 of 50 remain exactly the reality-bias signature (§A.5), showing that per-panel state with-
+out event structure leaves the signature failure intact; the missing input is the event and correspondence
+structure that Bp supplies. For Claude Sonnet 4, all 50 inspected failures ended at the fixed 200-token
+budget (finish_reason = length ), and 48 were overlong or truncated before reaching the required
+categorical answer, so itsB static accuracy mainly reflects truncation rather than a reasoning error.
+26
+
+===== PAGE 27 =====
+Table S9:Length-matched corrupted scaffolds per modelon Stage 3 ( n=500 per model). All
+corruptions are derived from Bp. Six-model means without Ministral-8B: A 77.2, Dmismatch 75.3,
+Dnoise 79.4,D shuffled 79.6.
+Model AD mismatch Dnoise Dshuffled Bp
+GPT-4o [23] 76.4 87.4 88.6 89.6 90.2
+Gemini 2.5 Pro [10] 71.8 45.0 53.8 57.6 90.4
+Claude Sonnet 4 [1] 78.8 79.6 85.0 77.6 97.6
+Qwen2.5-VL-72B [3] 79.2 83.0 87.6 87.2 90.0
+Llama 4 Mav. [20] 87.0 84.2 82.0 86.4 85.0
+GPT-4.1-mini [24] 70.2 72.6 79.6 79.0 80.2
+Ministral-8B [21] 53.6 71.0 79.6 86.6 88.4
+Mean73.9 74.7 79.5 80.688.8
+∆vs. A –(+0.8) (+5.6) (+6.7) (+14.9)
+G.7 Experiment 7: Length-matched corrupted scaffolds
+Three corruptions of the correct perceptual scaffold Bp test whether gains require correct content
+rather than scaffold format or text volume. Each keeps the format of Bp and is evaluated on the
+same 500 Stage 3 probes and seven models.
+•D mismatch: the Bp scaffold of a different variant of the same template, with whitespace-token
+length matched exactly. Within each template, variants are sorted and each is paired with the next,
+wrapping around, so all 500 partners share their target’s expected answer.
+•D noise: the correct Bp scaffold in which each entity name is independently replaced, with
+probability 0.3, by a different name from its category. This is not a one-to-one permutation;
+collisions and cascading substitutions can occur, and most names remain correct.
+•D shuffled: the correct Bp scaffold with panel sentences reordered. The “Panel k” prefixes are
+retained, so the original order is recoverable; we treat it as the weakest corruption.
+On aggregate, all three corruptions recover less than half of the 14.9 pp gain that the correct scaffold
+adds over A, while Bp itself differs from A at p≈4×10 −63 (McNemar, 3,500 matched pairs, §D.2).
+Dmismatch gives no significant gain (+0.8 pp; b= 520, c= 549, p=.38 ). Dnoise (+5.6 pp; b= 422,
+c= 618, p= 1.2×10 −9) and Dshuffled (+6.7 pp; b= 413, c= 648, p= 5.4×10 −13) give small but
+significant gains, well below the +14.9 pp of Bp (b= 226, c= 750). These gains come mainly from
+Ministral-8B (+17.4 to +33.0 pp over its A); on the other six models the effects are −1.9, +2.2,
+and+2.3pp (A= 77.2%).
+The per-model pattern is heterogeneous. Gemini 2.5 Pro falls well below A under every corruption
+(−14.2 to −26.8 pp) and Claude Sonnet 4 retains little of its Bp gain, whereas GPT-4o retains nearly
+all of it (+11.0 to +13.2 of +13.8 pp), and GPT-4.1-mini and Ministral-8B retain most of it under
+Dnoise and Dshuffled. Because every Dmismatch partner shares the template and expected answer,
+it preserves the template’s event structure while misdescribing the scene; the models that retain the
+gain under it appear to read that event structure from the text. The controls thus argue against text
+volume as the source of the gains, but they do not show that the benefit requires content bound to
+the specific image (§F).
+G.8 Scaffold length
+Scaffold length does not track accuracy. The zero-shot VLM-parser scaffolds (§G.1) are the longest
+we use, with a mean of 343 whitespace tokens, yet give no improvement over A ( PCR =−0.04
+and −0.27 for the two parsers). The structured scaffolds span 107 to 136 tokens, and the text-only
+prompt C, which yields the strongest text-side accuracy, is the shortest at about 40 tokens. Finally,
+image-plus-scaffold exceeds text-only ( Bf 98.4% vs. C 94.5%, PCRf >1 ), but because the Bf
+scaffold and the C narration differ in their text as well as in the image, this comparison does not
+by itself isolate the contribution of the image. On MindPower, where C is exactly the Bp description
+without the storyboard, adding the storyboard lowers accuracy (Bp 24.1%vs. C33.0%).
+27
+
+===== PAGE 28 =====
+G.9 MuMA-ToM scaffold audit
+We audited all 900 logged MuMA-ToMBf prompts against the nine visibility-pattern families of §G.2,
+refactored into equivalent regular expressions. The scaffolds contain entity identities, locations, and
+actions, and none matches any pattern (0 of 900). This establishes the absence of regex matches, not
+of every possible visibility cue. Within that limit, the MuMA-ToM visual-to-text gap (PCRf = 1.44;
+frontier1.81) is closed and exceeded by scaffolds without explicit visibility statements.
+G.10 Template-reweighted PCR
+To address potential inflation from answer-distribution imbalance, we compute PCR after reweighting:
+each of the 10 Stage 3 templates contributes equally to accuracy regardless of its probe count. Because
+every template contributes exactly 50 probes in our design, template-reweighting is equivalent to
+probe-averaging here, so the reweighted values coincide with the main aggregates: A= 73.9%, Ba =
+75.7%, Bp = 88.8%, Bf = 98.4%, C= 94.5% , with PCRrewa = 0.09, PCRrewp = 0.73, PCRrewf =
+1.19. The same qualitative pattern holds: automatic scaffolding is weak, perceptual scaffolding recov-
+ers a large fraction of the deficit, and full scaffolding closes and slightly exceeds the text-only gap.
+28
+
+===== PAGE 29 =====
+H Abstract 2D panels dataset overview
+The Abstract 2D panels benchmark is designed to evaluate whether VLM failures on visual
+false-belief tasks are better explained by perceptual bottlenecks or by reasoning bottlenecks. It spans
+object tracking, goal attribution, and Theory of Mind cases, and it is intentionally organized to mirror
+the developmental cascade described in the paper: object individuation at 3–5 months, goal attribution
+at 6–12 months, and false-belief reasoning at roughly 4 years. This developmental structure is part
+of the benchmark’s justification: later false-belief tasks depend on the representational outputs of
+earlier perceptual achievements, so failures on visual ToM probes may reflect missing perceptual
+state extraction rather than missing belief reasoning. The benchmark is also intentionally designed
+to keep the answer space short and tightly controlled so that errors are less confounded by free-form
+generation. Most targets are therefore simple outputs such as yes/no, left/right, a number, or
+a short phrase, with only two genuinely multi-token templates: unexpected_contents (round
+objects) and reality_vs_belief (Actually: right. Belief: left. ). The examples
+below focus on representative cases that make the contrast between image-based and text-only
+conditions especially easy to inspect.
+1. Question inventory
+Stage 1: Object tracking
+Template Question family Answer format Example
+occlusion_consistentMotion continuity under occlusion yes/no yes
+occlusion_violationMotion-continuity violation under occlusion yes/no no
+count_twoObject counting across panels number 2
+count_threeObject counting across panels number 3
+permanenceHidden-versus-gone judgment after occlusion one word hidden
+color_changeIdentity or color continuity across occlusion one word different
+Stage 2: Goal attribution
+Template Question family Answer format Example
+goal_upperGoal direction toward one of two targets upper/lower upper
+detour_obstacleCause of a detour around an obstacle A/B/C choice B
+no_goalNo-goal control: movement not directed to a target yes/no no
+wall_removedRational path choice when the obstacle is removed straight/curved straight
+Stage 3: False belief / Theory of Mind
+Template Question family Answer format Example
+sally_anne_searchFalse-belief search prediction left/right left
+sally_anne_beliefFalse-belief location attribution left/right left
+sally_anne_realityReality-location check left/right right
+reality_vs_beliefJoint reality-versus-belief dissociation two-slot Actual:
+right; belief:
+left
+knowledge_who_knowsKnowledge attribution stayed/left stayed
+knowledge_beliefBelief after an unseen transfer left/right left
+unexpected_contentsMisleading-container contents belief multi-token round
+objects
+two_roomsCross-room partial observability left/right right
+perspectives_differSame-versus-different belief comparison same/different different
+second_orderSecond-order belief or knowledge yes/no yes
+29
+
+===== PAGE 30 =====
+2. Visual template grid
+Representative strips.The grid below shows one saved panel sequence for each template, organized
+by developmental stage.
+Stage 1: Object Tracking
+occlusion\_consistent
+ occlusion\_violation
+count\_two
+ count\_three
+permanence
+ color\_change
+Stage 2: Goal Attribution
+goal\_upper
+ detour\_obstacle
+no\_goal
+ wall\_removed
+Stage 3: False Belief / Theory of Mind
+sally\_anne\_search
+ sally\_anne\_belief
+sally\_anne\_reality
+ reality\_vs\_belief
+knowledge\_who\_knows
+ knowledge\_belief
+unexpected\_contents
+ two\_rooms
+perspectives\_differ
+ second\_order
+30
+
+===== PAGE 31 =====
+3. Representative panel example for each template
+Example outputs.The cases below are sample examples from the saved probes. They use specific
+saved probe images and report saved responses from gpt-4o for conditions A, B_p, B_f, and C. The
+percentages reported below are template-level averages across 350 trials (7 models × 50 probes),
+not just the single illustrated case.
+sally\_anne\_reality(Stage 3)
+Text-only scene description
+purple and orange are in a room with a left mint container and a right violet
+container. purple places the pink object in the left container and then leaves.
+While purple is away, orange moves the object to the right container. purple
+returns after the move.
+Visual panels
+Why this case is interesting.This is a clean reality-location control where the image-only condition
+can still fail even though the answer depends only on the object’s true final location. In this saved
+example, A fails while B_p, B_f, and C all succeed. Calculated over the full template-level evaluation
+set, the condition averages are:A = 74.9%,B_p = 98.9%,B_f = 99.4%,C = 100.0%.
+Model outputs by condition
+31
+
+===== PAGE 32 =====
+Variant Setup Prompt used for model Model output
+AImage only Study this 6-panel visual sequence. Where is the pink object
+actually located in the final panel, left or right? Answer ONLY
+’left’ or ’right’.
+left
+B\_pImage + perceptual
+scaffold
+Study this image. Here is a structured perceptual description:
+Panel 1: purple and orange characters are in the room. pink
+object is near the left mint container. purple character places the
+object there. Panel 2: purple character moves to the door and
+exits. orange character remains in the room. pink object is in the
+left mint container. Panel 3: Only orange character is in the
+room. pink object moves from the left mint container toward the
+right violet container. Panel 4: orange character is in the room.
+pink object is in the right violet container. Panel 5: purple
+character returns through the door. orange character is in the
+room. pink object is in the right violet container. Panel 6: purple
+and orange characters are both in the room. pink object is in the
+right violet container. Where is the pink object actually located
+in the final panel, left or right? Answer ONLY ’left’ or ’right’.
+right
+B\_fImage + full scaffold Study this image. Here is a full structured description: Panel 1:
+purple and orange characters are in the room. pink object is near
+the left mint container. purple character places the object there.
+Panel 2: purple character moves to the door and exits. orange
+character remains in the room. pink object is in the left mint
+container. Panel 3: Only orange character is in the room. pink
+object moves from the left mint container toward the right violet
+container. Panel 4: orange character is in the room. pink object
+is in the right violet container. Panel 5: purple character returns
+through the door. orange character is in the room. pink object is
+in the right violet container. purple character was outside when
+the object moved from left to right and did not see that move.
+Where is the pink object actually located in the final panel, left
+or right? Answer ONLY ’left’ or ’right’.
+right
+CText only purple and orange are in a room with a left mint container and a
+right violet container. purple places the pink object in the left
+container and then leaves. While purple is away, orange moves
+the object to the right container. purple returns after the move.
+Where is the pink object actually located in the final panel, left
+or right? Answer ONLY ’left’ or ’right’.
+right
+two\_rooms(Stage 3)
+Text-only scene description
+blue starts in the left room with the pink object. green is in the right room.
+blue carries the object into the right room while green is watching. green then
+leaves. While green is gone, blue places the object in the right violet
+container. green returns later.
+Visual panels
+32
+
+===== PAGE 33 =====
+Why this case is interesting.This is a strong single-token failure case: A = 56.0% , B_p = 65.7% ,
+B_f = 98.9% , C = 78.6% . In the saved example below, A and B_p fail, while B_f and C both succeed.
+Model outputs by condition
+Variant Setup Prompt used for model Model output
+AImage only Study this 5-panel visual sequence. Where does the green
+character think the pink object is, left or right? Answer ONLY
+’left’ or ’right’.
+left
+B\_pImage + perceptual
+scaffold
+Study this image. Here is a structured perceptual description:
+Panel 1: blue character is in the left room with the pink object
+near the left coral container. green character is in the right room.
+Panel 2: blue character carries the pink object from the left room
+toward the right room. green character can see this transfer.
+Panel 3: green character exits from the right room. blue
+character and the pink object are in the right room. Panel 4:
+Only blue character is present. pink object is placed in the right
+violet container. Panel 5: green character returns to the right
+room. pink object is in the right violet container. Where does the
+green character think the pink object is, left or right? Answer
+ONLY ’left’ or ’right’.
+left
+B\_fImage + full scaffold Study this image. Here is a full structured description: Panel 1:
+blue character is in the left room with the pink object near the
+left coral container. green character is in the right room. Panel 2:
+blue character carries the pink object from the left room toward
+the right room. green character can see this transfer. Panel 3:
+green character exits from the right room. blue character and the
+pink object are in the right room. Panel 4: Only blue character is
+present. pink object is placed in the right violet container. Panel
+5: green character returns to the right room. pink object is in the
+right violet container. green character left before the object was
+placed in the right container, but had already seen the object
+taken into the right room. Where does the green character think
+the pink object is, left or right? Answer ONLY ’left’ or ’right’.
+right
+CText only blue starts in the left room with the pink object. green is in the
+right room. blue carries the object into the right room while
+green is watching. green then leaves. While green is gone, blue
+places the object in the right violet container. green returns later.
+Where does the green character think the pink object is, left or
+right? Answer ONLY ’left’ or ’right’.
+right
+unexpected\_contents(Stage 3)
+Text-only scene description
+A violet box has round symbols on it. teal opens it and finds amber rectangular
+contents inside. The box is closed again. Later, orange arrives and sees only
+the closed box with the round symbols.
+Visual panels
+33
+
+===== PAGE 34 =====
+Why this case is interesting.This is one of the two multi-token templates in the benchmark. In
+this saved example, GPT-4o fails in A but succeeds in B_p, B_f, and C, which makes the image-only
+gap directly visible. Calculated over the full template-level evaluation set, the condition averages
+are:A = 55.4%,B_p = 100.0%,B_f = 99.7%,C = 100.0%.
+Model outputs by condition
+Variant Setup Prompt used for model Model output
+AImage only Study this 5-panel visual sequence. What does the orange
+character think is inside the box, round objects or yellow
+rectangles? Answer ONLY ’round objects’ or ’yellow
+rectangles’.
+yellow
+rectangles
+B\_pImage + perceptual
+scaffold
+Study this image. Here is a structured perceptual description:
+Panel 1: teal character sees a closed violet box marked with
+round symbols. Panel 2: teal character opens the violet box.
+Inside are amber rectangular contents, not round objects. Panel
+3: The violet box is closed again and still shows the round
+symbols. Panel 4: orange character arrives and sees only the
+closed violet box with round symbols. Panel 5: orange character
+is still looking at the closed violet box. What does the orange
+character think is inside the box, round objects or yellow
+rectangles? Answer ONLY ’round objects’ or ’yellow
+rectangles’.
+round objects
+B\_fImage + full scaffold Study this image. Here is a full structured description: Panel 1:
+teal character sees a closed violet box marked with round
+symbols. Panel 2: teal character opens the violet box. Inside are
+amber rectangular contents, not round objects. Panel 3: The
+violet box is closed again and still shows the round symbols.
+Panel 4: orange character arrives and sees only the closed violet
+box with round symbols. Panel 5: orange character is still
+looking at the closed violet box. orange character never saw the
+box opened and only saw the closed box with the round symbols.
+What does the orange character think is inside the box, round
+objects or yellow rectangles? Answer ONLY ’round objects’ or
+’yellow rectangles’.
+round objects
+CText only A violet box has round symbols on it. teal opens it and finds
+amber rectangular contents inside. The box is closed again.
+Later, orange arrives and sees only the closed box with the
+round symbols. What does the orange character think is inside
+the box, round objects or yellow rectangles? Answer ONLY
+’round objects’ or ’yellow rectangles’.
+round objects
+second\_order(Stage 3)
+Text-only scene description
+teal and orange both see the lime object in the left violet container. orange
+leaves. While orange is away, teal moves the object to the right light-blue
+container. orange returns after the move.
+Visual panels
+34
+
+===== PAGE 35 =====
+Why this case is interesting.This is a higher-order belief probe: the model must judge whether
+one agent knows that another agent now has a false belief. In this saved example, A fails while B_p,
+B_f, and C succeed. Calculated over the full template-level evaluation set, the condition averages
+are:A = 64.9%,B_p = 97.7%,B_f = 100.0%,C = 90.9%.
+Model outputs by condition
+Variant Setup Prompt used for model Model output
+AImage only Study this 5-panel visual sequence. Does the teal character
+know that the orange character has a wrong belief about the
+object’s location, yes or no? Answer ONLY ’yes’ or ’no’.
+no
+B\_pImage + perceptual
+scaffold
+Study this image. Here is a structured perceptual description:
+Panel 1: teal and orange characters are in the room. lime object
+is in the left violet container. Panel 2: orange character exits
+through the door. teal character remains. lime object is in the
+left violet container. Panel 3: Only teal character is in the room.
+lime object moves from the left violet container toward the right
+light-blue container. Panel 4: teal character is in the room. lime
+object is in the right light-blue container. Panel 5: orange
+character returns. teal character is in the room. lime object is in
+the right light-blue container. Does the teal character know that
+the orange character has a wrong belief about the object’s
+location, yes or no? Answer ONLY ’yes’ or ’no’.
+Yes.
+B\_fImage + full scaffold Study this image. Here is a full structured description: Panel 1:
+teal and orange characters are in the room. lime object is in the
+left violet container. Panel 2: orange character exits through the
+door. teal character remains. lime object is in the left violet
+container. Panel 3: Only teal character is in the room. lime
+object moves from the left violet container toward the right
+light-blue container. Panel 4: teal character is in the room. lime
+object is in the right light-blue container. Panel 5: orange
+character returns. teal character is in the room. lime object is in
+the right light-blue container. orange character did not see the
+move, so orange still has the old belief. teal knows the move
+happened and knows that orange missed it. Does the teal
+character know that the orange character has a wrong belief
+about the object’s location, yes or no? Answer ONLY ’yes’ or
+’no’.
+Yes.
+CText only teal and orange both see the lime object in the left violet
+container. orange leaves. While orange is away, teal moves the
+object to the right light-blue container. orange returns after the
+move. Does the teal character know that the orange character
+has a wrong belief about the object’s location, yes or no?
+Answer ONLY ’yes’ or ’no’.
+yes
+4. Failures at the text-only ceiling
+The text-only ceiling is high ( 94.5% aggregate) but not perfect, and its failures are informative.
+OnTWO_ROOMS, text-only accuracy is 78.6%. In the saved case below (Figure 4b; probe
+s3_two_rooms_000; expected answer “right”), GPT-4o (2024-11-20) receives the full ground-truth
+narration, in which the returning agent watched the object being carried into the right room before
+leaving, yet answers “left”. The model over-applies the heuristic “absent agent, therefore old location”
+instead of tracking what the agent actually witnessed. A second text-only failure family is the
+Claude Sonnet 4 Stage 2 direction-convention anomaly (§F; 51.5%). These cases show that residual
+inferential errors exist in text as well; our claim is comparative, concerning the 20.6 pp visual-to-text
+gap, not a claim that text-side reasoning is perfect.
+35
+
+===== PAGE 36 =====
+Variant Setup Prompt used for model Model output
+C Text only red starts in the left room with the cyan object. blue is in the
+right room. red carries the object into the right room while blue
+is watching. blue then leaves. While blue is gone, red places the
+object in the right brown container. blue returns later. Where
+does the blue character think the cyan object is, left or right?
+Answer ONLY ’left’ or ’right’.
+left
+36
